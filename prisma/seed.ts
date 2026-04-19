@@ -44,6 +44,11 @@ async function main() {
       fileName: 'walmart-receipt-2024.jpg',
       fileSize: 245000,
       status: 'done',
+      purchaseDate: new Date(),
+      overallConfidence: 0.93,
+      reviewStatus: 'approved',
+      reviewedAt: new Date(),
+      syncStatus: 'synced',
       ocrRawText: 'WALMART SUPERCENTER\n1234 Main St\nSpringfield IL\n...',
       subtotal: 42.87,
       totalTax: 3.43,
@@ -55,6 +60,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'Great Value Whole Milk 1 Gal',
+            category: 'Dairy',
             quantity: 2,
             unitPrice: 3.98,
             lineTotal: 7.96,
@@ -65,6 +71,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'Bananas',
+            category: 'Produce',
             quantity: 1.52,
             unitPrice: 0.58,
             lineTotal: 0.88,
@@ -76,6 +83,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'Sara Lee Bread White 20oz',
+            category: 'Bakery',
             quantity: 1,
             unitPrice: 2.98,
             lineTotal: 2.98,
@@ -86,6 +94,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'Chicken Breast Boneless Skinless',
+            category: 'Meat',
             quantity: 2.1,
             unitPrice: 4.99,
             lineTotal: 10.48,
@@ -96,6 +105,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'Tide Laundry Detergent 64oz',
+            category: 'Household',
             quantity: 1,
             unitPrice: 11.97,
             lineTotal: 11.97,
@@ -106,6 +116,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'Great Value Eggs Large 12ct',
+            category: 'Dairy',
             quantity: 1,
             unitPrice: 3.48,
             lineTotal: 3.48,
@@ -116,6 +127,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'Prego Pasta Sauce Traditional',
+            category: 'Other',
             quantity: 1,
             unitPrice: 2.98,
             lineTotal: 2.98,
@@ -126,6 +138,7 @@ async function main() {
           {
             store: 'Walmart Supercenter',
             item: 'GV Orange Juice 52oz',
+            category: 'Beverages',
             quantity: 1,
             unitPrice: 3.48,
             lineTotal: 3.48,
@@ -150,6 +163,11 @@ async function main() {
       fileName: 'traderjoes-receipt.jpg',
       fileSize: 198000,
       status: 'done',
+      purchaseDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      overallConfidence: 0.95,
+      reviewStatus: 'approved',
+      reviewedAt: new Date(),
+      syncStatus: 'not_synced',
       subtotal: 28.45,
       totalTax: 1.14,
       grandTotal: 29.59,
@@ -160,6 +178,7 @@ async function main() {
           {
             store: "Trader Joe's",
             item: 'Organic Cage Free Brown Eggs',
+            category: 'Dairy',
             quantity: 1,
             unitPrice: 3.99,
             lineTotal: 3.99,
@@ -170,6 +189,7 @@ async function main() {
           {
             store: "Trader Joe's",
             item: 'Everything But The Bagel Seasoning',
+            category: 'Other',
             quantity: 1,
             unitPrice: 1.99,
             lineTotal: 1.99,
@@ -180,6 +200,7 @@ async function main() {
           {
             store: "Trader Joe's",
             item: 'Mandarin Orange Chicken',
+            category: 'Frozen',
             quantity: 1,
             unitPrice: 5.99,
             lineTotal: 5.99,
@@ -190,6 +211,7 @@ async function main() {
           {
             store: "Trader Joe's",
             item: 'Organic Whole Milk Greek Yogurt',
+            category: 'Dairy',
             quantity: 2,
             unitPrice: 2.49,
             lineTotal: 4.98,
@@ -200,6 +222,7 @@ async function main() {
           {
             store: "Trader Joe's",
             item: 'Dark Chocolate Peanut Butter Cups',
+            category: 'Snacks',
             quantity: 1,
             unitPrice: 2.99,
             lineTotal: 2.99,
@@ -210,6 +233,7 @@ async function main() {
           {
             store: "Trader Joe's",
             item: 'Cauliflower Gnocchi',
+            category: 'Frozen',
             quantity: 2,
             unitPrice: 2.99,
             lineTotal: 5.98,
@@ -220,6 +244,7 @@ async function main() {
           {
             store: "Trader Joe's",
             item: 'TJ Mixed Greens Salad',
+            category: 'Produce',
             quantity: 1,
             unitPrice: 3.49,
             lineTotal: 3.49,

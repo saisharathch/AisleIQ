@@ -3,18 +3,17 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Upload, Loader2, X, CloudUpload } from 'lucide-react'
+import { Upload, Loader2, X, CloudUpload, Copy, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { formatBytes } from '@/lib/utils'
-import { cn } from '@/lib/utils'
+import { formatBytes, cn } from '@/lib/utils'
+import { getFriendlyErrorMessage, readApiError } from '@/lib/api-client'
 
 const ACCEPTED = '.jpg,.jpeg,.png,.heic,.heif,.pdf'
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'application/pdf']
 const MAX_MB = parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB ?? '10')
 
 interface Props {
-  /** If true, renders a large drop zone card instead of a small button */
   variant?: 'button' | 'zone'
   className?: string
 }
@@ -26,11 +25,18 @@ export function UploadButton({ variant = 'button', className }: Props) {
   const [progress, setProgress] = useState(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [activeUploadKey, setActiveUploadKey] = useState<string | null>(null)
 
   const handleFile = useCallback(
     async (file: File) => {
+      const uploadKey = `${file.name}:${file.size}:${file.lastModified}`
+      if (uploading || activeUploadKey === uploadKey) {
+        toast.error('This receipt is already uploading. Please wait for the current attempt to finish.')
+        return
+      }
+
       if (!ACCEPTED_TYPES.includes(file.type)) {
-        toast.error(`Unsupported file type. Use JPG, PNG, HEIC, or PDF.`)
+        toast.error('Unsupported file type. Use JPG, PNG, HEIC, or PDF.')
         return
       }
       if (file.size > MAX_MB * 1024 * 1024) {
@@ -40,6 +46,7 @@ export function UploadButton({ variant = 'button', className }: Props) {
 
       setSelectedFile(file)
       setUploading(true)
+      setActiveUploadKey(uploadKey)
       setProgress(10)
 
       const formData = new FormData()
@@ -51,40 +58,70 @@ export function UploadButton({ variant = 'button', className }: Props) {
         setProgress(60)
 
         if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error ?? 'Upload failed')
+          const body = await res.json().catch(() => ({})) as Record<string, unknown>
+
+          if (body.code === 'DUPLICATE_FILE') {
+            const storeName   = (body.storeName as string | null) ?? 'Unknown Store'
+            const receiptId   = body.existingReceiptId as string
+            const dateStr     = body.date ? new Date(body.date as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
+            const grandTotal  = typeof body.grandTotal === 'number' ? `$${body.grandTotal.toFixed(2)}` : null
+
+            toast(
+              (t) => (
+                <div className="flex flex-col gap-2 min-w-[240px]">
+                  <div className="flex items-start gap-2">
+                    <Copy className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-sm text-slate-900">Already uploaded</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {storeName}{dateStr ? ` · ${dateStr}` : ''}{grandTotal ? ` · ${grandTotal}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => toast.dismiss(t.id)}
+                      className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1"
+                    >
+                      Dismiss
+                    </button>
+                    <a
+                      href={`/receipts/${receiptId}`}
+                      onClick={() => toast.dismiss(t.id)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md px-3 py-1 transition-colors"
+                    >
+                      View receipt <ArrowRight className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+              ),
+              { duration: 10000, icon: null },
+            )
+            return
+          }
+
+          const error = await readApiError(new Response(JSON.stringify(body), { status: res.status }), 'Upload failed')
+          throw new Error(getFriendlyErrorMessage(error))
         }
 
         const { data } = await res.json()
-        setProgress(80)
-
-        await pollStatus(data.id)
         setProgress(100)
 
-        toast.success('Receipt processed!')
+        toast.success('Receipt uploaded. We are processing it now.')
         router.push(`/receipts/${data.id}`)
         router.refresh()
       } catch (err: unknown) {
         toast.error((err as Error).message ?? 'Upload failed')
       } finally {
         setUploading(false)
+        setActiveUploadKey(null)
         setSelectedFile(null)
         setProgress(0)
         if (inputRef.current) inputRef.current.value = ''
       }
     },
-    [router],
+    [activeUploadKey, router, uploading],
   )
-
-  async function pollStatus(id: string, attempts = 0): Promise<void> {
-    if (attempts > 60) throw new Error('Processing timed out')
-    const res = await fetch(`/api/receipts/${id}/status`)
-    const { data } = await res.json()
-    if (data.status === 'done') return
-    if (data.status === 'failed') throw new Error(data.errorMessage ?? 'OCR failed')
-    await new Promise((r) => setTimeout(r, 2000))
-    return pollStatus(id, attempts + 1)
-  }
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -93,15 +130,17 @@ export function UploadButton({ variant = 'button', className }: Props) {
     if (file) handleFile(file)
   }
 
-  // Global drag-over listener (highlights the zone from anywhere on the page)
   useEffect(() => {
     if (variant !== 'zone') return
+
     const onDragEnter = () => setDragOver(true)
     const onDragLeave = (e: DragEvent) => {
       if (!e.relatedTarget) setDragOver(false)
     }
+
     window.addEventListener('dragenter', onDragEnter)
     window.addEventListener('dragleave', onDragLeave)
+
     return () => {
       window.removeEventListener('dragenter', onDragEnter)
       window.removeEventListener('dragleave', onDragLeave)
@@ -110,7 +149,6 @@ export function UploadButton({ variant = 'button', className }: Props) {
 
   return (
     <>
-      {/* Hidden file input */}
       <input
         ref={inputRef}
         type="file"
@@ -125,7 +163,10 @@ export function UploadButton({ variant = 'button', className }: Props) {
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragOver(true)
+          }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
           className={cn(
@@ -138,54 +179,61 @@ export function UploadButton({ variant = 'button', className }: Props) {
           )}
           aria-label="Upload receipt"
         >
-          <div className={cn(
-            'h-16 w-16 rounded-full flex items-center justify-center transition-colors',
-            dragOver ? 'bg-primary/20' : 'bg-muted group-hover:bg-primary/10',
-          )}>
+          <div
+            className={cn(
+              'h-16 w-16 rounded-full flex items-center justify-center transition-colors',
+              dragOver ? 'bg-primary/20' : 'bg-muted group-hover:bg-primary/10',
+            )}
+          >
             {uploading ? (
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             ) : (
-              <CloudUpload className={cn('h-8 w-8 transition-colors', dragOver ? 'text-primary' : 'text-muted-foreground group-hover:text-primary')} />
+              <CloudUpload
+                className={cn(
+                  'h-8 w-8 transition-colors',
+                  dragOver ? 'text-primary' : 'text-muted-foreground group-hover:text-primary',
+                )}
+              />
             )}
           </div>
           <div>
             <p className="font-semibold text-lg">
-              {uploading ? 'Processing receipt…' : dragOver ? 'Drop to upload' : 'Upload your first receipt'}
+              {uploading ? 'Processing receipt...' : dragOver ? 'Drop to upload' : 'Upload your first receipt'}
             </p>
             <p className="text-sm text-muted-foreground mt-1">
               {uploading
-                ? 'AI is reading your receipt, this takes a few seconds…'
-                : 'Drag & drop or click to choose — JPG, PNG, HEIC, PDF up to 10 MB'}
+                ? 'AI is reading your receipt. This takes a few seconds...'
+                : 'Drag and drop or click to choose JPG, PNG, HEIC, or PDF up to 10 MB'}
             </p>
           </div>
           {uploading && (
             <div className="w-full max-w-xs">
               <Progress value={progress} className="h-2" />
               <p className="text-xs text-muted-foreground mt-1 text-center">
-                {progress < 60 ? 'Uploading…' : progress < 90 ? 'Reading receipt…' : 'Almost done…'}
+                {progress < 60 ? 'Uploading...' : progress < 100 ? 'Queueing receipt...' : 'Opening review page...'}
               </p>
             </div>
           )}
         </button>
       ) : (
-        <Button
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="gap-2"
-        >
+        <Button onClick={() => inputRef.current?.click()} disabled={uploading} className="gap-2">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          {uploading ? 'Processing…' : 'Upload Receipt'}
+          {uploading ? 'Processing...' : 'Upload Receipt'}
         </Button>
       )}
 
-      {/* Full-screen processing overlay (button variant only) */}
       {uploading && variant === 'button' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-lg space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Processing receipt…</h3>
+              <h3 className="font-semibold">Processing receipt...</h3>
               <button
-                onClick={() => { setUploading(false); setSelectedFile(null); setProgress(0) }}
+                onClick={() => {
+                  setUploading(false)
+                  setActiveUploadKey(null)
+                  setSelectedFile(null)
+                  setProgress(0)
+                }}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -194,14 +242,14 @@ export function UploadButton({ variant = 'button', className }: Props) {
 
             {selectedFile && (
               <p className="text-sm text-muted-foreground">
-                {selectedFile.name} — {formatBytes(selectedFile.size)}
+                {selectedFile.name} - {formatBytes(selectedFile.size)}
               </p>
             )}
 
             <Progress value={progress} />
 
             <p className="text-xs text-muted-foreground text-center">
-              {progress < 60 ? 'Uploading…' : progress < 90 ? 'AI reading receipt…' : 'Almost done…'}
+              {progress < 60 ? 'Uploading...' : progress < 100 ? 'Queueing receipt...' : 'Opening review page...'}
             </p>
           </div>
         </div>

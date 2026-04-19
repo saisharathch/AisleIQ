@@ -1,24 +1,23 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ExternalLink, Loader2, Sheet, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { ExternalLink, Loader2, Sheet, AlertTriangle, CheckCircle2, RefreshCw, Clock3, RotateCcw } from 'lucide-react'
+import Link from 'next/link'
+import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { getFriendlyErrorMessage } from '@/lib/api-client'
 import { ITEM_CATEGORIES, categorizeItem } from '@/lib/google-sheets'
 import type { ReceiptItem } from '@prisma/client'
+import type { ReviewStatus, SyncStatus } from '@/types'
+import type { SheetsAuthStatus } from '@/app/api/sheets/status/route'
 
 const PREF_KEY = 'sheets_upload_preference'
 type Pref = 'ask' | 'never'
-
-interface GoogleAuthStatus {
-  connected: boolean
-  hasScope: boolean
-  needsReconnect?: boolean
-}
 
 interface Props {
   receiptId: string
@@ -27,141 +26,221 @@ interface Props {
   grandTotal: number | null
   alreadyUploaded: boolean
   existingSheetUrl?: string | null
+  sheetsSyncedAt?: Date | null
+  syncStatus: SyncStatus
+  syncErrorMessage?: string | null
+  reviewStatus: ReviewStatus
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSyncSuccess?: () => void
 }
 
 export function GoogleSheetsModal({
   receiptId, storeName, items, grandTotal,
-  alreadyUploaded, existingSheetUrl, open, onOpenChange,
+  alreadyUploaded, existingSheetUrl, sheetsSyncedAt,
+  syncStatus, syncErrorMessage, reviewStatus,
+  open, onOpenChange, onSyncSuccess,
 }: Props) {
-  const [authStatus, setAuthStatus] = useState<GoogleAuthStatus | null>(null)
+  const [authStatus, setAuthStatus] = useState<SheetsAuthStatus | null>(null)
   const [categories, setCategories] = useState<Record<string, string>>({})
   const [uploading, setUploading] = useState(false)
   const [sheetUrl, setSheetUrl] = useState<string | null>(existingSheetUrl ?? null)
-  const [pref, setPref] = useState<Pref>('ask')
-  const [rememberChoice, setRememberChoice] = useState(false)
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(sheetsSyncedAt ?? null)
 
-  // Load saved preference
-  useEffect(() => {
-    const saved = localStorage.getItem(PREF_KEY) as Pref | null
-    if (saved) setPref(saved)
-  }, [])
-
-  // Auto-categorize items when modal opens
   useEffect(() => {
     if (!open) return
     const initial: Record<string, string> = {}
-    for (const item of items) {
-      initial[item.id] = categorizeItem(item.item)
-    }
+    for (const item of items) initial[item.id] = item.category ?? categorizeItem(item.item)
     setCategories(initial)
   }, [open, items])
 
-  // Check Google auth status
   useEffect(() => {
     if (!open) return
     fetch('/api/sheets/status')
-      .then((r) => r.json())
-      .then(setAuthStatus)
-      .catch(() => setAuthStatus({ connected: false, hasScope: false }))
+      .then((response) => response.json())
+      .then((data: SheetsAuthStatus) => setAuthStatus(data))
+      .catch(() => setAuthStatus({ status: 'not_connected' }))
   }, [open])
 
-  const handleUpload = useCallback(async () => {
+  const handleUpload = useCallback(async (force = false) => {
     setUploading(true)
     try {
       const res = await fetch(`/api/receipts/${receiptId}/sheets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categories }),
+        body: JSON.stringify({ categories, force }),
       })
       const data = await res.json()
 
       if (!res.ok) {
-        if (data.code === 'DUPLICATE' && data.sheetUrl) {
+        if (data.code === 'ALREADY_SYNCED' && data.sheetUrl) {
           setSheetUrl(data.sheetUrl)
-          toast.success('Already in Sheets!')
-        } else if (data.code === 'SHEETS_SCOPE_MISSING' || data.code === 'GOOGLE_NOT_CONNECTED') {
-          toast.error('Please reconnect your Google account with Sheets access.')
-          setAuthStatus({ connected: false, hasScope: false })
+          if (data.syncedAt) setLastSyncedAt(new Date(data.syncedAt))
+          toast('Already synced. Use re-sync if you want to push the latest edits.', { icon: '📋' })
+        } else if (
+          data.code === 'GOOGLE_NOT_CONNECTED' ||
+          data.code === 'SHEETS_SCOPE_MISSING' ||
+          data.code === 'GOOGLE_AUTH_EXPIRED' ||
+          data.code === 'NO_REFRESH_TOKEN'
+        ) {
+          setAuthStatus(
+            data.code === 'SHEETS_SCOPE_MISSING'
+              ? { status: 'missing_scope' }
+              : { status: 'token_expired', canRefresh: false },
+          )
+          toast.error(getFriendlyErrorMessage({ code: data.code, error: data.error }))
         } else {
-          toast.error(data.error ?? 'Upload failed')
+          toast.error(getFriendlyErrorMessage({ code: data.code ?? 'UNKNOWN_ERROR', error: data.error ?? 'Sync failed' }))
         }
         return
       }
 
       setSheetUrl(data.sheetUrl)
-      if (rememberChoice) localStorage.setItem(PREF_KEY, 'ask')
-      toast.success('Uploaded to Google Sheets!')
+      setLastSyncedAt(new Date(data.syncedAt))
+      toast.success(force ? 'Google Sheets re-sync complete.' : 'Google Sheets sync complete.')
+      onSyncSuccess?.()
     } catch {
-      toast.error('Network error — upload failed')
+      toast.error('Network error. Sync failed, please try again.')
     } finally {
       setUploading(false)
     }
-  }, [receiptId, categories, rememberChoice])
+  }, [categories, onSyncSuccess, receiptId])
 
-  const handleSkip = useCallback(() => {
-    if (rememberChoice) localStorage.setItem(PREF_KEY, 'never')
-    onOpenChange(false)
-  }, [rememberChoice, onOpenChange])
+  const authBanner = (() => {
+    if (!authStatus || authStatus.status === 'ok') return null
+    if (authStatus.status === 'not_connected') return {
+      title: 'Google account not connected',
+      body: 'Connect Google before you sync receipts into Sheets.',
+      action: 'Connect Google',
+    }
+    if (authStatus.status === 'missing_scope') return {
+      title: 'Sheets permission missing',
+      body: 'Reconnect Google and allow Google Sheets access to enable syncing.',
+      action: 'Reconnect Google',
+    }
+    return {
+      title: 'Google session expired',
+      body: 'Sign in with Google again so the app can refresh your Sheets access.',
+      action: 'Sign in again',
+    }
+  })()
 
-  const needsGoogleSignIn = authStatus !== null && (!authStatus.connected || !authStatus.hasScope)
+  const syncBanner = (() => {
+    if (syncStatus === 'synced') {
+      return {
+        tone: 'green',
+        icon: CheckCircle2,
+        title: 'Synced to Google Sheets',
+        body: lastSyncedAt
+          ? `Last synced ${formatDistanceToNow(lastSyncedAt, { addSuffix: true })}.`
+          : 'This receipt is already in your spreadsheet.',
+      }
+    }
+    if (syncStatus === 'syncing') {
+      return {
+        tone: 'sky',
+        icon: Clock3,
+        title: 'Sync in progress',
+        body: 'The latest receipt data is being pushed to Google Sheets.',
+      }
+    }
+    if (syncStatus === 'failed') {
+      return {
+        tone: 'red',
+        icon: AlertTriangle,
+        title: 'Last sync failed',
+        body: syncErrorMessage ?? 'Google Sheets sync failed. You can retry safely.',
+      }
+    }
+    if (syncStatus === 'stale') {
+      return {
+        tone: 'amber',
+        icon: RotateCcw,
+        title: 'Spreadsheet is stale',
+        body: 'This receipt changed after the last sync. Re-sync to update Google Sheets.',
+      }
+    }
+    return null
+  })()
+
+  const uploadBlocked = authBanner !== null || authStatus === null || reviewStatus !== 'approved'
+  const shouldForceSync = syncStatus === 'stale' || syncStatus === 'failed' || alreadyUploaded
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-3xl max-h-[90vh] flex flex-col p-4 sm:p-6">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100">
               <Sheet className="h-4 w-4 text-green-600" />
             </div>
-            <DialogTitle>Upload to Google Sheets</DialogTitle>
+            <DialogTitle>Sync to Google Sheets</DialogTitle>
           </div>
           <DialogDescription>
-            Send <strong>{storeName ?? 'this receipt'}</strong> to your{' '}
-            <em>Grocery Expense Tracker</em> spreadsheet — or skip.
+            Push {storeName ?? 'this receipt'} into your grocery tracker spreadsheet with the reviewed categories below.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 py-2">
-          {/* Auth status */}
-          {authStatus === null && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Checking Google connection…
+          {reviewStatus !== 'approved' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Approve this receipt before syncing</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Review the extracted fields first so the spreadsheet stays clean and trustworthy.
+                </p>
+              </div>
             </div>
           )}
 
-          {needsGoogleSignIn && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+          {authStatus === null && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking Google connection...
+            </div>
+          )}
+
+          {authBanner && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
               <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
               <div className="space-y-2">
-                <p className="text-sm font-medium text-amber-800">
-                  {authStatus?.connected ? 'Sheets access not granted' : 'Google account not connected'}
-                </p>
-                <p className="text-xs text-amber-700">
-                  {authStatus?.connected
-                    ? 'You signed in with Google but did not grant Sheets permission. Please sign out and sign back in.'
-                    : 'Sign in with Google to enable Sheets upload.'}
-                </p>
+                <p className="text-sm font-medium text-amber-800">{authBanner.title}</p>
+                <p className="text-xs text-amber-700">{authBanner.body}</p>
                 <Button size="sm" variant="outline" asChild>
-                  <a href="/api/auth/signin?callbackUrl=/dashboard">Connect Google Account</a>
+                  <Link href="/api/auth/signin?callbackUrl=/dashboard">{authBanner.action}</Link>
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Already uploaded */}
-          {(alreadyUploaded || sheetUrl) && (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4 flex items-start gap-3">
-              <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-green-800">Already uploaded to Sheets</p>
+          {syncBanner && (
+            <div className={`rounded-xl border p-4 flex items-start gap-3 ${
+              syncBanner.tone === 'green'
+                ? 'border-green-200 bg-green-50'
+                : syncBanner.tone === 'amber'
+                  ? 'border-amber-200 bg-amber-50'
+                  : syncBanner.tone === 'red'
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-sky-200 bg-sky-50'
+            }`}>
+              <syncBanner.icon className={`h-4 w-4 mt-0.5 shrink-0 ${
+                syncBanner.tone === 'green'
+                  ? 'text-green-600'
+                  : syncBanner.tone === 'amber'
+                    ? 'text-amber-600'
+                    : syncBanner.tone === 'red'
+                      ? 'text-red-600'
+                      : 'text-sky-600'
+              }`} />
+              <div className="space-y-1 flex-1">
+                <p className="text-sm font-medium">{syncBanner.title}</p>
+                <p className="text-xs text-muted-foreground">{syncBanner.body}</p>
                 {sheetUrl && (
                   <a
                     href={sheetUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-green-700 underline hover:text-green-900"
+                    className="inline-flex items-center gap-1 text-xs underline hover:text-foreground"
                   >
                     Open spreadsheet <ExternalLink className="h-3 w-3" />
                   </a>
@@ -170,122 +249,110 @@ export function GoogleSheetsModal({
             </div>
           )}
 
-          {/* Items preview with category editing */}
-          {!alreadyUploaded && !sheetUrl && (
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Preview — {items.length} items · Adjust categories if needed
-              </p>
-              <div className="rounded-lg border overflow-hidden">
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 sticky top-0">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Item</th>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground w-36">Category</th>
-                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Review categories before sync
+            </p>
+            <div className="rounded-xl border overflow-hidden">
+              <div className="max-h-72 overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Item</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground w-40">Category</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item, index) => (
+                      <tr key={item.id} className={index % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                        <td className="px-3 py-2 truncate max-w-[220px]" title={item.item}>
+                          {item.item}
+                        </td>
+                        <td className="px-3 py-1">
+                          <Select
+                            value={categories[item.id] ?? 'Other'}
+                            onValueChange={(value) => setCategories((prev) => ({ ...prev, [item.id]: value }))}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ITEM_CATEGORIES.map((category) => (
+                                <SelectItem key={category} value={category} className="text-xs">
+                                  {category}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {item.lineTotal != null ? `$${item.lineTotal.toFixed(2)}` : '-'}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item, i) => (
-                        <tr key={item.id} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
-                          <td className="px-3 py-1.5 truncate max-w-[180px]" title={item.item}>
-                            {item.item}
-                          </td>
-                          <td className="px-3 py-1">
-                            <Select
-                              value={categories[item.id] ?? 'Other'}
-                              onValueChange={(v) => setCategories((prev) => ({ ...prev, [item.id]: v }))}
-                            >
-                              <SelectTrigger className="h-7 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {ITEM_CATEGORIES.map((cat) => (
-                                  <SelectItem key={cat} value={cat} className="text-xs">
-                                    {cat}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">
-                            {item.lineTotal != null ? `$${item.lineTotal.toFixed(2)}` : '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    {grandTotal != null && (
-                      <tfoot className="border-t bg-muted/30">
-                        <tr>
-                          <td colSpan={2} className="px-3 py-2 font-medium text-sm">Grand Total</td>
-                          <td className="px-3 py-2 text-right font-bold tabular-nums text-primary">
-                            ${grandTotal.toFixed(2)}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                  {grandTotal != null && (
+                    <tfoot className="border-t bg-muted/30">
+                      <tr>
+                        <td colSpan={2} className="px-3 py-2 font-medium text-sm">Grand Total</td>
+                        <td className="px-3 py-2 text-right font-bold tabular-nums text-primary">
+                          ${grandTotal.toFixed(2)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
               </div>
             </div>
-          )}
-
-          {/* Remember preference */}
-          {!alreadyUploaded && !sheetUrl && (
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={rememberChoice}
-                onChange={(e) => setRememberChoice(e.target.checked)}
-                className="rounded"
-              />
-              Remember my choice for future receipts
-            </label>
-          )}
+          </div>
         </div>
 
-        <DialogFooter className="gap-2 pt-2 border-t">
-          {sheetUrl ? (
-            <>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-              <Button asChild>
-                <a href={sheetUrl} target="_blank" rel="noopener noreferrer" className="gap-2">
-                  <ExternalLink className="h-4 w-4" /> Open Spreadsheet
-                </a>
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="ghost" onClick={handleSkip} disabled={uploading}>
-                No, skip
-              </Button>
-              <Button
-                onClick={handleUpload}
-                disabled={uploading || needsGoogleSignIn || authStatus === null}
-                className="gap-2"
-              >
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sheet className="h-4 w-4" />}
-                {uploading ? 'Uploading…' : 'Yes, upload to Sheets'}
-              </Button>
-            </>
-          )}
+        <DialogFooter className="gap-2 pt-2 border-t flex-col sm:flex-row">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={uploading} className="w-full sm:w-auto">
+            Close
+          </Button>
+          <Button
+            onClick={() => handleUpload(shouldForceSync)}
+            disabled={uploading || uploadBlocked}
+            className="gap-2 w-full sm:w-auto"
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sheet className="h-4 w-4" />}
+            {uploading
+              ? 'Syncing...'
+              : syncStatus === 'stale'
+                ? 'Re-sync to Sheets'
+                : syncStatus === 'failed'
+                  ? 'Retry Sync'
+                  : syncStatus === 'synced'
+                    ? 'Sync Again'
+                    : 'Sync to Sheets'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
 
-// Lightweight button that checks pref and opens the modal
 export function GoogleSheetsButton({
-  receiptId, storeName, items, grandTotal, alreadyUploaded, existingSheetUrl,
+  receiptId,
+  storeName,
+  items,
+  grandTotal,
+  alreadyUploaded,
+  existingSheetUrl,
+  sheetsSyncedAt,
+  syncStatus,
+  syncErrorMessage,
+  reviewStatus,
+  onSyncSuccess,
 }: Omit<Props, 'open' | 'onOpenChange'>) {
   const [open, setOpen] = useState(false)
 
   const handleClick = () => {
     const pref = (localStorage.getItem(PREF_KEY) as Pref | null) ?? 'ask'
     if (pref === 'never' && !alreadyUploaded) {
-      toast('Sheets upload skipped (preference set to never). Click the Sheets button to change.', { icon: '📋' })
+      toast('Sheets sync skipped by preference. Open the modal again any time.', { icon: '📋' })
       return
     }
     setOpen(true)
@@ -295,7 +362,13 @@ export function GoogleSheetsButton({
     <>
       <Button variant="outline" size="sm" className="gap-2" onClick={handleClick}>
         <Sheet className="h-4 w-4 text-green-600" />
-        {alreadyUploaded ? 'View in Sheets' : 'Sheets'}
+        {syncStatus === 'failed'
+          ? 'Retry Sheets'
+          : syncStatus === 'stale'
+            ? 'Re-sync Sheets'
+            : alreadyUploaded
+              ? 'Sheets'
+              : 'Sync to Sheets'}
       </Button>
       <GoogleSheetsModal
         receiptId={receiptId}
@@ -304,8 +377,13 @@ export function GoogleSheetsButton({
         grandTotal={grandTotal}
         alreadyUploaded={alreadyUploaded}
         existingSheetUrl={existingSheetUrl}
+        sheetsSyncedAt={sheetsSyncedAt}
+        syncStatus={syncStatus}
+        syncErrorMessage={syncErrorMessage}
+        reviewStatus={reviewStatus}
         open={open}
         onOpenChange={setOpen}
+        onSyncSuccess={onSyncSuccess}
       />
     </>
   )

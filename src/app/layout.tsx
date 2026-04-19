@@ -7,14 +7,14 @@ import { Providers } from '@/components/layout/Providers'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: { default: 'GroceryBill — Smart Receipt Scanner', template: '%s | GroceryBill' },
+  title: { default: 'AisleIQ — Upload receipts. Track smarter. Spend better.', template: '%s | AisleIQ' },
   description:
-    'Upload a grocery receipt and instantly get a structured, editable table of every item — with totals, tax, and export.',
-  keywords: ['grocery', 'receipt scanner', 'OCR', 'bill calculator', 'expense tracker'],
-  authors: [{ name: 'GroceryBill' }],
+    'Upload receipts. Track smarter. Spend better. AisleIQ turns grocery receipts into structured spending insights instantly.',
+  keywords: ['grocery', 'receipt scanner', 'OCR', 'expense tracker', 'spending insights', 'AisleIQ'],
+  authors: [{ name: 'AisleIQ' }],
   openGraph: {
-    title: 'GroceryBill — Smart Receipt Scanner',
-    description: 'Upload any grocery receipt. Get instant structured data.',
+    title: 'AisleIQ — Upload receipts. Track smarter. Spend better.',
+    description: 'Upload receipts. Track smarter. Spend better.',
     type: 'website',
   },
 }

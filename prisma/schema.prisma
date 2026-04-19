@@ -29,6 +29,8 @@ model User {
   sessions  Session[]
   receipts  Receipt[]
   editLogs  EditLog[]
+  categoryPreferences CategoryPreference[]
+  budgets   Budget[]
 
   @@index([email])
 }
@@ -75,19 +77,35 @@ model Receipt {
   id            String        @id @default(cuid())
   userId        String
   storeName     String?
+  purchaseDate  DateTime?
   fileUrl       String        // stored path or S3 key
   fileType      String        // "image/jpeg" | "image/png" | "image/heic" | "application/pdf"
   fileName      String
   fileSize      Int           // bytes
-  status        String        @default("pending") // "pending" | "processing" | "done" | "failed"
+  fileHash      String?       // SHA-256 of raw file bytes — used for exact duplicate detection
+  status        String        @default("queued") // "queued" | "processing" | "done" | "failed"
+  overallConfidence Float?
+  reviewStatus  String        @default("needs_review") // "needs_review" | "approved"
+  reviewedAt    DateTime?
   errorMessage  String?
   ocrRawText    String?       // raw OCR text for debugging
   subtotal      Float?
   totalTax      Float?
   discount      Float?
   grandTotal    Float?
+  syncStatus      String        @default("not_synced") // "not_synced" | "syncing" | "synced" | "failed" | "stale"
+  syncErrorMessage String?
+  syncAttempts     Int           @default(0)
+  lastSyncHash     String?
+  duplicateOfReceiptId String?
+  duplicateScore      Float?
+  duplicateReason     String?
+  duplicateOverride   Boolean     @default(false)
   notes           String?
-  sheetsUploadId  String?       // set after successful Google Sheets upload (prevents duplicates)
+  paidBy          String?       // who paid (for roommate split)
+  splitWith       String?       // JSON-serialized string[] of names to split with
+  sheetsUploadId  String?       // spreadsheet ID of the Grocery Expense Tracker (set on first sync)
+  sheetsSyncedAt  DateTime?     // timestamp of the most recent successful sync
   uploadDate      DateTime      @default(now())
   processedAt   DateTime?
   updatedAt     DateTime      @updatedAt
@@ -95,10 +113,33 @@ model Receipt {
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   items    ReceiptItem[]
   editLogs EditLog[]
+  job      Job?
 
   @@index([userId])
   @@index([storeName])
   @@index([uploadDate])
+  @@index([userId, fileHash])
+}
+
+// ─── Background Job Queue ──────────────────────────────────────────────────
+
+model Job {
+  id            String    @id @default(cuid())
+  receiptId     String    @unique  // one active job per receipt; enforces idempotency
+  status        String    @default("queued")  // "queued" | "processing" | "done" | "failed"
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(3)
+  lastError     String?
+  lockedAt      DateTime?           // set when a worker claims the job
+  lockedBy      String?             // worker ID (for observability / multi-worker safety)
+  nextAttemptAt DateTime  @default(now())  // controls backoff scheduling
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([lockedAt])
 }
 
 model ReceiptItem {
@@ -106,6 +147,7 @@ model ReceiptItem {
   receiptId     String
   store         String?  // may differ per item if multi-store receipt
   item          String
+  category      String?
   quantity      Float?
   unitPrice     Float?
   lineTotal     Float?
@@ -121,6 +163,22 @@ model ReceiptItem {
   editLogs EditLog[]
 
   @@index([receiptId])
+}
+
+model CategoryPreference {
+  id             String   @id @default(cuid())
+  userId         String
+  normalizedName String
+  category       String
+  usageCount     Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastUsedAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, normalizedName])
+  @@index([userId, category])
 }
 
 // ─── Audit / Edit History ──────────────────────────────────────────────────
@@ -143,6 +201,24 @@ model EditLog {
   @@index([receiptId])
   @@index([userId])
   @@index([createdAt])
+}
+
+// ─── Budgets ───────────────────────────────────────────────────────────────
+
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String
+  year      Int
+  month     Int      // 1-12; 0 = yearly overall
+  category  String?  // null = overall monthly budget
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year, month, category])
+  @@index([userId, year, month])
 }
 
 // ─── Admin / Metrics ────────────────────────────────────────────────────────

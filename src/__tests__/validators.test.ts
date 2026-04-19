@@ -1,4 +1,11 @@
-import { signUpSchema, signInSchema, receiptItemSchema } from '@/lib/validators'
+import {
+  signUpSchema,
+  signInSchema,
+  receiptItemSchema,
+  receiptUploadFileSchema,
+  retryReceiptSchema,
+  sheetsSyncSchema,
+} from '@/lib/validators'
 
 describe('signUpSchema', () => {
   it('accepts valid input', () => {
@@ -35,5 +42,43 @@ describe('receiptItemSchema', () => {
   })
   it('rejects negative unitPrice', () => {
     expect(receiptItemSchema.safeParse({ item: 'Milk', unitPrice: -1 }).success).toBe(false)
+  })
+  it('rejects blank item names with only whitespace', () => {
+    expect(receiptItemSchema.safeParse({ item: '   ' }).success).toBe(false)
+  })
+})
+
+describe('receiptUploadFileSchema', () => {
+  it('accepts a valid receipt file', () => {
+    expect(receiptUploadFileSchema.safeParse({ name: 'receipt.jpg', size: 1024, type: 'image/jpeg' }).success).toBe(true)
+  })
+
+  it('rejects empty files', () => {
+    expect(receiptUploadFileSchema.safeParse({ name: 'receipt.jpg', size: 0, type: 'image/jpeg' }).success).toBe(false)
+  })
+})
+
+describe('retryReceiptSchema', () => {
+  it('accepts empty payloads', () => {
+    expect(retryReceiptSchema.safeParse({}).success).toBe(true)
+  })
+
+  it('rejects invalid retry actions', () => {
+    expect(retryReceiptSchema.safeParse({ action: 'start-over' }).success).toBe(false)
+  })
+})
+
+describe('sheetsSyncSchema', () => {
+  it('accepts valid category overrides', () => {
+    expect(
+      sheetsSyncSchema.safeParse({
+        force: true,
+        categories: { item1: 'Produce', item2: 'Other' },
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejects unsupported categories', () => {
+    expect(sheetsSyncSchema.safeParse({ categories: { item1: 'Pets' } }).success).toBe(false)
   })
 })

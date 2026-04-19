@@ -56,13 +56,13 @@ export default function LandingPage() {
         </div>
 
         <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-6xl">
-          Turn grocery receipts into{' '}
-          <span className="text-primary">structured data</span>{' '}
-          instantly
+          Upload receipts.{' '}
+          <span className="text-primary">Track smarter.</span>{' '}
+          Spend better.
         </h1>
 
         <p className="max-w-xl text-lg text-muted-foreground">
-          Upload any grocery receipt — photo or PDF. GroceryBill extracts every item into an editable table with totals, tax, and export in seconds.
+          AisleIQ turns grocery receipts into structured spending insights — every item, category, store, and trend — in seconds.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3">
@@ -85,7 +85,7 @@ export default function LandingPage() {
             <div className="h-3 w-3 rounded-full bg-red-400" />
             <div className="h-3 w-3 rounded-full bg-yellow-400" />
             <div className="h-3 w-3 rounded-full bg-green-400" />
-            <span className="ml-2 text-xs text-muted-foreground">grocerybill.app/receipts/walmart-2024</span>
+            <span className="ml-2 text-xs text-muted-foreground">aisleiq.app/receipts/walmart-2024</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -177,10 +177,15 @@ export default function LandingPage() {
       <footer className="border-t py-8 px-4">
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-4 w-4 text-primary" />
-            <span className="font-medium text-foreground">GroceryBill</span>
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-teal-600">
+              <ShoppingCart className="h-3.5 w-3.5 text-white" />
+            </div>
+            <div className="leading-none">
+              <span className="font-bold text-foreground text-sm">AisleIQ</span>
+              <span className="block text-[10px] text-muted-foreground">Upload receipts. Track smarter. Spend better.</span>
+            </div>
           </div>
-          <p>© {new Date().getFullYear()} GroceryBill. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} AisleIQ. All rights reserved.</p>
           <nav className="flex gap-4">
             <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
             <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>

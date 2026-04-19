@@ -3,7 +3,9 @@
 import { useState, useRef, useCallback } from 'react'
 import { Loader2, Trash2, AlertCircle, Copy, Check, MessageSquareText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatCurrency } from '@/lib/calculations'
+import { ITEM_CATEGORIES } from '@/lib/google-sheets'
 import { cn } from '@/lib/utils'
 import type { ReceiptItem } from '@prisma/client'
 
@@ -38,7 +40,7 @@ export function ReceiptTable({ items, storeName, savingId, onUpdate, onDelete }:
     let value: string | number | null = editValue.trim()
     if (field !== 'item') {
       value = value === '' ? null : parseFloat(value)
-      if (typeof value === 'number' && isNaN(value)) value = null
+      if (typeof value === 'number' && Number.isNaN(value)) value = null
     }
 
     setEditCell(null)
@@ -56,6 +58,7 @@ export function ReceiptTable({ items, storeName, savingId, onUpdate, onDelete }:
     const text = [
       storeName ?? '',
       item.item,
+      item.category ?? '',
       item.quantity ?? '',
       item.unitPrice != null ? item.unitPrice.toFixed(2) : '',
       item.lineTotal != null ? item.lineTotal.toFixed(2) : '',
@@ -89,12 +92,12 @@ export function ReceiptTable({ items, storeName, savingId, onUpdate, onDelete }:
     const raw = item[field]
     const displayValue =
       field === 'item'
-        ? (raw as string | null) ?? '—'
+        ? (raw as string | null) ?? '-'
         : typeof raw === 'number'
-        ? field === 'quantity'
-          ? raw
-          : formatCurrency(raw as number)
-        : '—'
+          ? field === 'quantity'
+            ? raw
+            : formatCurrency(raw as number)
+          : '-'
 
     return (
       <span className={cn('text-sm', raw === null && field !== 'item' && 'text-muted-foreground italic')}>
@@ -112,126 +115,180 @@ export function ReceiptTable({ items, storeName, savingId, onUpdate, onDelete }:
   ]
 
   return (
-    <div className="rounded-lg border overflow-hidden">
+    <div className="rounded-2xl border overflow-hidden bg-card">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[980px] text-sm">
           <thead>
-            <tr className="border-b bg-muted/50">
+            <tr className="border-b bg-muted/40">
               <th className="px-4 py-3 text-left font-medium text-muted-foreground text-xs uppercase tracking-wide">
                 Store
               </th>
-              {columns.map((col) => (
+              {columns.map((column) => (
                 <th
-                  key={col.key}
+                  key={column.key}
                   className={cn(
                     'px-4 py-3 text-xs uppercase tracking-wide font-medium text-muted-foreground',
-                    col.numeric ? 'text-right' : 'text-left',
+                    column.numeric ? 'text-right' : 'text-left',
                   )}
                 >
-                  {col.label}
+                  {column.label}
                 </th>
               ))}
-              {/* Actions column */}
-              <th className="px-2 py-3 w-20" />
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                Category
+              </th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                Confidence
+              </th>
+              <th className="px-2 py-3 w-24" />
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <tr
-                key={item.id}
-                className={cn(
-                  'border-b last:border-0 hover:bg-muted/30 transition-colors group relative',
-                  item.needsReview && 'bg-amber-50/50 hover:bg-amber-50 dark:bg-amber-950/20',
-                )}
-              >
-                {/* Store */}
-                <td className="px-4 py-2.5 text-muted-foreground text-xs max-w-[120px] truncate">
-                  {item.store ?? storeName ?? '—'}
-                </td>
+            {items.map((item) => {
+              const confidencePercent = Math.round((item.confidence ?? 0) * 100)
 
-                {/* Editable columns */}
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    onClick={() => startEdit(item, col.key)}
-                    className={cn(
-                      'px-4 py-2.5 cursor-pointer hover:bg-muted/50 rounded transition-colors',
-                      col.numeric && 'text-right',
-                      col.key === 'item' && 'max-w-[200px]',
-                    )}
-                  >
-                    <div className={cn('flex items-center gap-1', col.numeric && 'justify-end')}>
-                      {item.needsReview && col.key === 'item' && (
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" title="Needs review — low OCR confidence" />
+              return (
+                <tr
+                  key={item.id}
+                  className={cn(
+                    'border-b last:border-0 hover:bg-muted/20 transition-colors group relative',
+                    item.needsReview && 'bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-950/20',
+                  )}
+                >
+                  <td className="px-4 py-3 text-muted-foreground text-xs max-w-[120px] truncate">
+                    {item.store ?? storeName ?? '-'}
+                  </td>
+
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      onClick={() => startEdit(item, column.key)}
+                      className={cn(
+                        'px-4 py-3 cursor-pointer hover:bg-muted/40 rounded transition-colors align-top',
+                        column.numeric && 'text-right',
+                        column.key === 'item' && 'max-w-[220px]',
+                        item.needsReview && column.key !== 'tax' && 'ring-1 ring-inset ring-amber-200/70',
                       )}
-                      <CellContent item={item} field={col.key} />
+                    >
+                      <div className={cn('flex items-center gap-1.5', column.numeric && 'justify-end')}>
+                        {item.needsReview && column.key === 'item' && (
+                          <span title="Likely needs human review">
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          </span>
+                        )}
+                        <CellContent item={item} field={column.key} />
+                      </div>
+                    </td>
+                  ))}
+
+                  <td className="px-4 py-3 min-w-[160px]">
+                    <Select
+                      value={item.category ?? 'Other'}
+                      onValueChange={(value) => onUpdate(item.id, 'category', value)}
+                    >
+                      <SelectTrigger className="h-8 text-xs bg-background/80">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ITEM_CATEGORIES.map((category) => (
+                          <SelectItem key={category} value={category} className="text-xs">
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+
+                  <td className="px-4 py-3 min-w-[150px]">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className={cn(
+                          'font-medium',
+                          confidencePercent < 70 ? 'text-amber-700' : 'text-muted-foreground',
+                        )}>
+                          {confidencePercent}%
+                        </span>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px]',
+                          item.needsReview
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-700',
+                        )}>
+                          {item.needsReview ? 'Check' : 'Looks good'}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn(
+                            'h-full rounded-full',
+                            confidencePercent < 70 ? 'bg-amber-500' : 'bg-emerald-500',
+                          )}
+                          style={{ width: `${confidencePercent}%` }}
+                        />
+                      </div>
                     </div>
                   </td>
-                ))}
 
-                {/* Action buttons */}
-                <td className="px-2 py-2.5">
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {/* Source text tooltip trigger */}
-                    {item.sourceText && (
-                      <div className="relative">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                          title="Show original OCR text"
-                          onClick={() =>
-                            setSourceTooltip(
-                              sourceTooltip?.itemId === item.id
-                                ? null
-                                : { itemId: item.id, text: item.sourceText! },
-                            )
-                          }
-                        >
-                          <MessageSquareText className="h-3.5 w-3.5" />
-                        </Button>
-                        {sourceTooltip?.itemId === item.id && (
-                          <div className="absolute right-8 top-0 z-20 w-64 rounded-lg border bg-popover p-3 shadow-md text-xs text-popover-foreground">
-                            <p className="font-medium mb-1 text-muted-foreground">Original OCR text:</p>
-                            <p className="font-mono whitespace-pre-wrap break-words">{sourceTooltip.text}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Copy row */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                      title="Copy row as TSV"
-                      onClick={() => copyRow(item)}
-                    >
-                      {copiedId === item.id ? (
-                        <Check className="h-3.5 w-3.5 text-green-600" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
+                  <td className="px-2 py-3">
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      {item.sourceText && (
+                        <div className="relative">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            title="Show original OCR text"
+                            onClick={() =>
+                              setSourceTooltip(
+                                sourceTooltip?.itemId === item.id
+                                  ? null
+                                  : { itemId: item.id, text: item.sourceText! },
+                              )
+                            }
+                          >
+                            <MessageSquareText className="h-3.5 w-3.5" />
+                          </Button>
+                          {sourceTooltip?.itemId === item.id && (
+                            <div className="absolute right-8 top-0 z-20 w-64 rounded-lg border bg-popover p-3 shadow-md text-xs text-popover-foreground">
+                              <p className="font-medium mb-1 text-muted-foreground">Original OCR text:</p>
+                              <p className="font-mono whitespace-pre-wrap break-words">{sourceTooltip.text}</p>
+                            </div>
+                          )}
+                        </div>
                       )}
-                    </Button>
 
-                    {/* Delete */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      title="Delete row"
-                      onClick={() => onDelete(item.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        title="Copy row as TSV"
+                        onClick={() => copyRow(item)}
+                      >
+                        {copiedId === item.id ? (
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        title="Delete row"
+                        onClick={() => onDelete(item.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
 
             {items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-sm">
                   No items yet. Add a row or wait for OCR to complete.
                 </td>
               </tr>

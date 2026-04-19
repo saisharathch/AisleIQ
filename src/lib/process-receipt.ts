@@ -1,115 +1,103 @@
-import { db } from './db'
-import { saveFile } from './storage'
 import { parseReceiptFromBase64, parseReceiptFromText, normalizeMediaType } from './ocr'
+import { db } from './db'
+import type { ParsedReceipt } from '@/types'
 import sharp from 'sharp'
 
-export async function processReceipt(receiptId: string) {
-  const start = Date.now()
-  let success = false
-  let errorDetail: string | undefined
+/**
+ * Fetch the stored file and run OCR. Returns parsed data — makes NO database writes.
+ *
+ * Keeping this function side-effect-free means:
+ *   - It is safe to call even if the job was already reset by a retry.
+ *   - The caller (worker) decides whether the results are still relevant before
+ *     committing them (see queue.commitParsedResults).
+ *   - Crashes mid-OCR leave zero DB state to clean up.
+ *
+ * Throws on any failure so the worker can handle retry / backoff.
+ */
+export async function parseReceiptOcr(receiptId: string): Promise<ParsedReceipt> {
+  const receipt = await db.receipt.findUnique({ where: { id: receiptId } })
+  if (!receipt) throw new Error('Receipt not found')
+  if (!receipt.fileUrl) throw new Error('No file to process')
 
-  try {
-    const receipt = await db.receipt.findUnique({ where: { id: receiptId } })
-    if (!receipt) throw new Error('Receipt not found')
+  // ── Fetch file bytes ──────────────────────────────────────────────────────────
+  let buffer: Buffer
+  let mimeType = receipt.fileType
 
-    // Mark as processing and clear any previous items on retry
-    await db.receipt.update({ where: { id: receiptId }, data: { status: 'processing', errorMessage: null } })
-    if (receipt.status === 'failed') {
-      await db.receiptItem.deleteMany({ where: { receiptId } })
+  const storageType = process.env.STORAGE_TYPE ?? 'local'
+  if (storageType === 's3') {
+    const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3')
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
+    const bucket = process.env.AWS_S3_BUCKET
+    if (!accessKeyId || !secretAccessKey || !bucket) {
+      throw new Error(
+        'S3 credentials not configured (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_S3_BUCKET)',
+      )
     }
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION ?? 'us-east-1',
+      endpoint: process.env.AWS_S3_ENDPOINT,
+      credentials: { accessKeyId, secretAccessKey },
+    })
+    const key = receipt.fileUrl.startsWith('https://')
+      ? receipt.fileUrl.split('/').slice(3).join('/')
+      : receipt.fileUrl
+    const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+    const chunks: Uint8Array[] = []
+    for await (const chunk of resp.Body as AsyncIterable<Uint8Array>) chunks.push(chunk)
+    buffer = Buffer.concat(chunks)
+  } else {
+    const fs = await import('fs/promises')
+    const path = await import('path')
+    const localPath = path.join(process.cwd(), 'public', receipt.fileUrl)
+    buffer = await fs.readFile(localPath)
+  }
 
-    let fileUrl = receipt.fileUrl
-    let mimeType = receipt.fileType
+  // ── HEIC → JPEG conversion ────────────────────────────────────────────────────
+  if (mimeType === 'image/heic' || mimeType === 'image/heif') {
+    buffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer()
+    mimeType = 'image/jpeg'
+  }
 
-    // If no file yet (fresh upload), the caller should have set fileUrl already
-    if (!fileUrl) throw new Error('No file to process')
+  if (mimeType.startsWith('image/')) {
+    const optimized = await optimizeImageForOcr(buffer, mimeType)
+    buffer = optimized.buffer
+    mimeType = optimized.mimeType
+  }
 
-    // Fetch the file bytes from local storage or S3
-    let buffer: Buffer
-    const storageType = process.env.STORAGE_TYPE ?? 'local'
-    if (storageType === 's3') {
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3')
-      const s3 = new S3Client({
-        region: process.env.AWS_REGION ?? 'us-east-1',
-        endpoint: process.env.AWS_S3_ENDPOINT,
-        credentials: {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        },
-      })
-      const key = fileUrl.startsWith('https://') ? fileUrl.split('/').slice(3).join('/') : fileUrl
-      const resp = await s3.send(new GetObjectCommand({ Bucket: process.env.AWS_S3_BUCKET!, Key: key }))
-      const chunks: Uint8Array[] = []
-      for await (const chunk of resp.Body as AsyncIterable<Uint8Array>) chunks.push(chunk)
-      buffer = Buffer.concat(chunks)
-    } else {
-      const fs = await import('fs/promises')
-      const path = await import('path')
-      const localPath = path.join(process.cwd(), 'public', fileUrl)
-      buffer = await fs.readFile(localPath)
-    }
+  // ── OCR ───────────────────────────────────────────────────────────────────────
+  if (mimeType === 'application/pdf') {
+    const { default: pdfParse } = await import('pdf-parse')
+    const data = await pdfParse(buffer)
+    return parseReceiptFromText(data.text)
+  }
 
-    // Convert HEIC → JPEG
-    if (mimeType === 'image/heic' || mimeType === 'image/heif') {
-      buffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer()
-      mimeType = 'image/jpeg'
-    }
+  const base64 = buffer.toString('base64')
+  const normalizedMime = normalizeMediaType(mimeType)
+  return parseReceiptFromBase64(base64, normalizedMime)
+}
 
-    let parsed
-    if (mimeType === 'application/pdf') {
-      const { default: pdfParse } = await import('pdf-parse')
-      const data = await pdfParse(buffer)
-      parsed = await parseReceiptFromText(data.text)
-    } else {
-      const base64 = buffer.toString('base64')
-      const normalizedMime = normalizeMediaType(mimeType)
-      parsed = await parseReceiptFromBase64(base64, normalizedMime)
-    }
+async function optimizeImageForOcr(buffer: Buffer, mimeType: string) {
+  const shouldKeepPng = mimeType === 'image/png'
 
-    await db.receipt.update({
-      where: { id: receiptId },
-      data: {
-        storeName: parsed.storeName,
-        ocrRawText: parsed.rawText,
-        subtotal: parsed.subtotal,
-        totalTax: parsed.totalTax,
-        discount: parsed.discount,
-        grandTotal: parsed.grandTotal,
-        status: 'done',
-        processedAt: new Date(),
-        items: {
-          create: parsed.items.map((item, i) => ({
-            store: parsed.storeName,
-            item: item.item,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            lineTotal: item.lineTotal,
-            tax: item.tax,
-            confidence: item.confidence,
-            needsReview: item.needsReview,
-            sourceText: item.sourceText,
-            sortOrder: i,
-          })),
-        },
-      },
+  const pipeline = sharp(buffer, { failOn: 'none' })
+    .rotate()
+    .resize({
+      width: 1800,
+      height: 2400,
+      fit: 'inside',
+      withoutEnlargement: true,
     })
 
-    success = true
-  } catch (err: unknown) {
-    errorDetail = (err as Error).message
-    await db.receipt.update({
-      where: { id: receiptId },
-      data: { status: 'failed', errorMessage: errorDetail },
-    })
-  } finally {
-    await db.parseLog.create({
-      data: {
-        receiptId,
-        success,
-        duration: Date.now() - start,
-        model: 'claude-opus-4-7',
-        errorDetail,
-      },
-    })
+  if (shouldKeepPng) {
+    return {
+      buffer: await pipeline.png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer(),
+      mimeType: 'image/png' as const,
+    }
+  }
+
+  return {
+    buffer: await pipeline.jpeg({ quality: 82, mozjpeg: true }).toBuffer(),
+    mimeType: 'image/jpeg' as const,
   }
 }

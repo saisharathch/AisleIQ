@@ -12,13 +12,15 @@ export const ITEM_CATEGORIES = [
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  Produce: ['apple', 'banana', 'lettuce', 'tomato', 'onion', 'potato', 'carrot', 'broccoli', 'spinach', 'pepper', 'cucumber', 'celery', 'garlic', 'lemon', 'lime', 'orange', 'grape', 'berry', 'avocado', 'mushroom', 'salad', 'kale', 'zucchini', 'corn', 'melon'],
+  // Beverages must be checked before Produce so "orange juice" / "grape juice" etc.
+  // match "juice" here rather than "orange" / "grape" in Produce.
+  Beverages: ['juice', 'oj', ' ade', 'soda', 'water', 'coffee', 'tea', 'drink', 'beverage', 'wine', 'beer', 'folgers', 'lemonade', 'gatorade', 'powerade', 'energy', 'kombucha', 'cider', 'punch', 'kool', 'crystal light'],
+  Produce: ['apple', 'banana', 'lettuce', 'tomato', 'onion', 'potato', 'carrot', 'broccoli', 'spinach', 'pepper', 'cucumber', 'celery', 'garlic', 'lemon', 'lime', 'grape', 'berry', 'avocado', 'mushroom', 'salad', 'kale', 'zucchini', 'corn', 'melon', 'mango', 'pineapple', 'peach', 'plum', 'pear', 'cilantro', 'parsley', 'radish'],
   Dairy: ['milk', 'cheese', 'butter', 'yogurt', 'cream', 'egg', 'parm', 'mozzarella', 'cheddar', 'cottage', 'sour cream', 'half and half', 'creamer', 'whip', 'dairy'],
   Meat: ['chicken', 'beef', 'pork', 'turkey', 'fish', 'salmon', 'tuna', 'shrimp', 'bacon', 'sausage', 'ham', 'steak', 'ground', 'deli', 'chkn', 'chnk chkn', 'tilapia', 'cod', 'crab', 'lobster', 'lamb'],
   Bakery: ['bread', 'bagel', 'muffin', 'cake', 'roll', 'tortilla', 'bun', 'croissant', 'donut', 'pie', 'cookie', 'cracker', 'biscuit', 'loaf'],
   Frozen: ['frozen', 'ice cream', 'pizza', 'waffle', 'nugget', 'fries', 'edamame', 'frost', 'gelato', 'sorbet'],
   Snacks: ['chip', 'popcorn', 'pretzel', 'granola', 'nuts', 'candy', 'chocolate', 'gummy', 'trail mix', 'jerky', 'peanut butter', 'pnt butt', 'snack'],
-  Beverages: ['juice', 'soda', 'water', 'coffee', 'tea', 'drink', 'beverage', 'wine', 'beer', 'folgers', 'twist', 'lemonade', 'gatorade', 'energy', 'bottle', 'can soda'],
   Household: ['paper', 'towel', 'tissue', 'soap', 'detergent', 'cleaner', 'trash', 'bag', 'foil', 'wrap', 'glove', 'sponge', 'nitrile', 'nitril', 'bleach', 'mop', 'broom', 'laundry'],
   'Personal Care': ['shampoo', 'conditioner', 'toothpaste', 'razor', 'lotion', 'deodorant', 'body wash', 'face wash', 'vitamin', 'supplement', 'medicine', 'bandage'],
 }
@@ -26,12 +28,10 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
 export function categorizeItem(itemName: string): ItemCategory {
   const lower = itemName.toLowerCase()
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some((kw) => lower.includes(kw))) return category as ItemCategory
+    if (keywords.some((keyword) => lower.includes(keyword))) return category as ItemCategory
   }
   return 'Other'
 }
-
-// ─── Token management ──────────────────────────────────────────────────────
 
 async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_at: number }> {
   const res = await fetch(TOKEN_ENDPOINT, {
@@ -44,14 +44,23 @@ async function refreshAccessToken(refreshToken: string): Promise<{ access_token:
       grant_type: 'refresh_token',
     }),
   })
+
+  const body = await res.json().catch(() => ({})) as Record<string, string>
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(`Token refresh failed: ${err.error_description ?? err.error}`)
+    const detail = body.error_description ?? body.error ?? `HTTP ${res.status}`
+    console.error('[sheets] Token refresh failed:', detail)
+    if (body.error === 'invalid_grant') throw new Error('GOOGLE_AUTH_EXPIRED')
+    throw new Error(`Token refresh failed: ${detail}`)
   }
-  const data = await res.json()
+
+  if (!body.access_token || typeof body.expires_in === 'undefined') {
+    throw new Error('Token refresh returned an incomplete response from Google')
+  }
+
   return {
-    access_token: data.access_token,
-    expires_at: Math.floor(Date.now() / 1000) + (data.expires_in as number),
+    access_token: body.access_token,
+    expires_at: Math.floor(Date.now() / 1000) + Number(body.expires_in),
   }
 }
 
@@ -76,8 +85,6 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   return access_token
 }
 
-// ─── Sheets API helpers ────────────────────────────────────────────────────
-
 async function sheetsRequest(method: string, url: string, token: string, body?: unknown) {
   const res = await fetch(url, {
     method,
@@ -92,10 +99,8 @@ async function sheetsRequest(method: string, url: string, token: string, body?: 
     if (status === 404) throw new Error('SHEET_NOT_FOUND')
     throw new Error((err as { error?: { message?: string } }).error?.message ?? `Sheets API error ${status}`)
   }
-  return res.json()
+  return res.json().catch(() => ({}))
 }
-
-// ─── Spreadsheet setup ─────────────────────────────────────────────────────
 
 async function createSpreadsheet(token: string): Promise<string> {
   const spreadsheet = await sheetsRequest('POST', SHEETS_BASE, token, {
@@ -108,12 +113,11 @@ async function createSpreadsheet(token: string): Promise<string> {
 
   const id: string = spreadsheet.spreadsheetId
 
-  // Write headers
   await sheetsRequest(
     'PUT',
-    `${SHEETS_BASE}/${id}/values/Receipts!A1:K1?valueInputOption=USER_ENTERED`,
+    `${SHEETS_BASE}/${id}/values/Receipts!A1:L1?valueInputOption=USER_ENTERED`,
     token,
-    { values: [['Date', 'Store Name', 'Item Name', 'Category', 'Quantity', 'Price', 'Line Total', 'Tax', 'Total Receipt Amount', 'Payment Method', 'Notes']] },
+    { values: [['Receipt ID', 'Date', 'Store Name', 'Item Name', 'Category', 'Quantity', 'Price', 'Line Total', 'Tax', 'Total Receipt Amount', 'Payment Method', 'Notes']] },
   )
   await sheetsRequest(
     'PUT',
@@ -122,7 +126,6 @@ async function createSpreadsheet(token: string): Promise<string> {
     { values: [['Month', 'Category', 'Total Spent']] },
   )
 
-  // Bold + green header rows
   await sheetsRequest('POST', `${SHEETS_BASE}/${id}:batchUpdate`, token, {
     requests: [0, 1].map((sheetId) => ({
       repeatCell: {
@@ -141,9 +144,8 @@ async function createSpreadsheet(token: string): Promise<string> {
   return id
 }
 
-// ─── Public upload function ────────────────────────────────────────────────
-
 export interface SheetReceiptRow {
+  receiptId: string
   date: string
   storeName: string
   item: string
@@ -177,15 +179,26 @@ export async function uploadReceiptToSheets(
 
   if (!sheetId) sheetId = await createSpreadsheet(token)
 
+  await replaceExistingReceiptRows(sheetId, token, rows)
+
   await sheetsRequest(
     'POST',
-    `${SHEETS_BASE}/${sheetId}/values/Receipts!A:K:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `${SHEETS_BASE}/${sheetId}/values/Receipts!A:L:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     token,
     {
-      values: rows.map((r) => [
-        r.date, r.storeName, r.item, r.category,
-        r.quantity ?? '', r.price ?? '', r.lineTotal ?? '', r.tax ?? '',
-        r.grandTotal ?? '', r.paymentMethod, r.notes,
+      values: rows.map((row) => [
+        row.receiptId,
+        row.date,
+        row.storeName,
+        row.item,
+        row.category,
+        row.quantity ?? '',
+        row.price ?? '',
+        row.lineTotal ?? '',
+        row.tax ?? '',
+        row.grandTotal ?? '',
+        row.paymentMethod,
+        row.notes,
       ]),
     },
   )
@@ -195,69 +208,86 @@ export async function uploadReceiptToSheets(
   return sheetId
 }
 
-// ─── Monthly summary updater ───────────────────────────────────────────────
-
 async function updateMonthlySummary(spreadsheetId: string, token: string, rows: SheetReceiptRow[]) {
-  // Aggregate new rows into month/category buckets
   const incoming: Record<string, Record<string, number>> = {}
   for (const row of rows) {
-    const d = new Date(row.date)
-    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const cat = row.category || 'Other'
+    const date = new Date(row.date)
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const category = row.category || 'Other'
     incoming[monthKey] ??= {}
-    incoming[monthKey][cat] = ((incoming[monthKey][cat] ?? 0) + (row.lineTotal ?? 0))
+    incoming[monthKey][category] = ((incoming[monthKey][category] ?? 0) + (row.lineTotal ?? 0))
   }
 
-  // Read existing summary
-  const existing = await sheetsRequest(
+  const receiptsData = await sheetsRequest(
     'GET',
-    `${SHEETS_BASE}/${spreadsheetId}/values/Monthly Summary!A2:C?majorDimension=ROWS`,
+    `${SHEETS_BASE}/${spreadsheetId}/values/Receipts!A2:L?majorDimension=ROWS`,
     token,
   ).catch(() => ({ values: [] }))
 
   const summaryMap: Record<string, Record<string, number>> = {}
-  for (const row of (existing.values ?? []) as string[][]) {
-    const [month, category, amt] = row
-    if (!month || !category || category === 'TOTAL') continue
-    summaryMap[month] ??= {}
-    summaryMap[month][category] = (summaryMap[month][category] ?? 0) + (parseFloat(amt ?? '0') || 0)
+  for (const row of (receiptsData.values ?? []) as string[][]) {
+    const [, dateValue, , , category, , , lineTotal] = row
+    if (!dateValue || !category) continue
+    const date = new Date(dateValue)
+    if (Number.isNaN(date.getTime())) continue
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    summaryMap[monthKey] ??= {}
+    summaryMap[monthKey][category] = (summaryMap[monthKey][category] ?? 0) + (parseFloat(lineTotal ?? '0') || 0)
   }
 
-  // Merge
-  for (const [month, cats] of Object.entries(incoming)) {
-    summaryMap[month] ??= {}
-    for (const [cat, amt] of Object.entries(cats)) {
-      summaryMap[month][cat] = round2((summaryMap[month][cat] ?? 0) + amt)
-    }
-  }
-
-  // Build output rows (sorted month desc, category asc) with monthly totals
   const outputRows: (string | number)[][] = []
   const months = Object.keys(summaryMap).sort((a, b) => b.localeCompare(a))
 
   for (const month of months) {
-    const cats = summaryMap[month]
-    const catEntries = Object.entries(cats).sort(([a], [b]) => a.localeCompare(b))
+    const categories = summaryMap[month]
+    const categoryEntries = Object.entries(categories).sort(([a], [b]) => a.localeCompare(b))
     let monthTotal = 0
-    for (const [cat, amt] of catEntries) {
-      outputRows.push([month, cat, amt])
-      monthTotal += amt
+    for (const [category, amount] of categoryEntries) {
+      const roundedAmount = round2(amount)
+      outputRows.push([month, category, roundedAmount])
+      monthTotal += roundedAmount
     }
     outputRows.push([month, 'TOTAL', round2(monthTotal)])
     outputRows.push(['', '', ''])
   }
 
-  if (outputRows.length === 0) return
-
-  // Clear old summary data and write fresh
   await sheetsRequest(
     'PUT',
     `${SHEETS_BASE}/${spreadsheetId}/values/Monthly Summary!A2:C?valueInputOption=USER_ENTERED`,
     token,
-    { values: outputRows },
+    { values: outputRows.length > 0 ? outputRows : [['', '', '']] },
+  )
+}
+
+async function replaceExistingReceiptRows(spreadsheetId: string, token: string, rows: SheetReceiptRow[]) {
+  const receiptIds = Array.from(new Set(rows.map((row) => row.receiptId)))
+  if (receiptIds.length === 0) return
+
+  const existing = await sheetsRequest(
+    'GET',
+    `${SHEETS_BASE}/${spreadsheetId}/values/Receipts!A2:L?majorDimension=ROWS`,
+    token,
+  ).catch(() => ({ values: [] }))
+
+  const keptRows = ((existing.values ?? []) as string[][]).filter((row) => !receiptIds.includes(row[0] ?? ''))
+
+  await sheetsRequest(
+    'POST',
+    `${SHEETS_BASE}/${spreadsheetId}/values/Receipts!A2:L:clear`,
+    token,
+    {},
+  )
+
+  if (keptRows.length === 0) return
+
+  await sheetsRequest(
+    'PUT',
+    `${SHEETS_BASE}/${spreadsheetId}/values/Receipts!A2:L?valueInputOption=USER_ENTERED`,
+    token,
+    { values: keptRows },
   )
 }
 
 function round2(n: number) {
-  return Math.round(n * 100) / 100
+  return Math.round((n + Number.EPSILON) * 100) / 100
 }

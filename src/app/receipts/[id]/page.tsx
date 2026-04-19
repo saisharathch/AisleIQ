@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { Navbar } from '@/components/layout/Navbar'
+import { AppShell } from '@/components/layout/AppShell'
 import { ReceiptDetailView } from '@/components/receipt/ReceiptDetailView'
 
 interface Props {
@@ -29,11 +29,10 @@ export default async function ReceiptDetailPage({ params }: Props) {
   if (!receipt) notFound()
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1 container py-8">
+    <AppShell title={receipt.storeName ?? 'Receipt Detail'}>
+      <div className="px-4 sm:px-6 py-6">
         <ReceiptDetailView receipt={receipt} />
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

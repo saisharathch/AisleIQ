@@ -43,7 +43,7 @@ export default function SignUpPage() {
       redirect: false,
     })
 
-    toast.success('Account created! Welcome to GroceryBill.')
+    toast.success('Account created! Welcome to AisleIQ.')
     router.push('/dashboard')
     router.refresh()
   }
@@ -56,12 +56,14 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-primary/5 to-background p-4">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center gap-2 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-            <ShoppingCart className="h-6 w-6 text-primary" />
+        <div className="flex flex-col items-center gap-3 mb-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-600 shadow-sm">
+            <ShoppingCart className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold">Create your account</h1>
-          <p className="text-sm text-muted-foreground">Start scanning receipts for free</p>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">AisleIQ</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Upload receipts. Track smarter. Spend better.</p>
+          </div>
         </div>
 
         <div className="rounded-xl border bg-card shadow-sm p-6 space-y-4">

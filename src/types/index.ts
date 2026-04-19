@@ -6,6 +6,8 @@ export type { Receipt, ReceiptItem, User, EditLog }
 // ─── Extended types ────────────────────────────────────────────────────────
 
 export type ReceiptStatus = 'pending' | 'processing' | 'done' | 'failed'
+export type ReviewStatus = 'needs_review' | 'approved'
+export type SyncStatus = 'not_synced' | 'syncing' | 'synced' | 'failed' | 'stale'
 export type UserRole = 'user' | 'admin'
 export type StorageType = 'local' | 's3'
 export type ExportFormat = 'csv' | 'pdf'
@@ -40,6 +42,7 @@ export interface ParsedReceiptItem {
 
 export interface ParsedReceipt {
   storeName: string | null
+  purchaseDate: string | null
   items: ParsedReceiptItem[]
   subtotal: number | null
   totalTax: number | null
@@ -59,8 +62,11 @@ export interface ApiSuccess<T = unknown> {
 export interface ApiError {
   ok: false
   error: string
-  code?: string
-  details?: unknown
+  code: string
+  details?: Array<{
+    field?: string
+    message: string
+  }>
 }
 
 export type ApiResponse<T = unknown> = ApiSuccess<T> | ApiError
@@ -83,6 +89,7 @@ export interface ReceiptTotals {
   grandTotal: number
   itemCount: number
   flaggedCount: number
+  avgConfidence: number
 }
 
 export interface ValidationIssue {
@@ -116,4 +123,13 @@ export interface EditableCell {
   itemId: string
   field: keyof ReceiptItem
   value: string | number | boolean | null
+}
+
+export interface DuplicateMatch {
+  receiptId: string
+  storeName: string | null
+  purchaseDate: string | null
+  grandTotal: number | null
+  score: number
+  reason: string
 }

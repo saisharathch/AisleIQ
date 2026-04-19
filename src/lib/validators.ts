@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ITEM_CATEGORIES } from './google-sheets'
 
 export const signUpSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -16,7 +17,8 @@ export const signInSchema = z.object({
 })
 
 export const receiptItemSchema = z.object({
-  item: z.string().min(1, 'Item name is required').max(255),
+  item: z.string().trim().min(1, 'Item name is required').max(255),
+  category: z.enum(ITEM_CATEGORIES).nullable().optional(),
   quantity: z.number().positive().nullable().optional(),
   unitPrice: z.number().min(0).nullable().optional(),
   lineTotal: z.number().min(0).nullable().optional(),
@@ -24,13 +26,39 @@ export const receiptItemSchema = z.object({
   needsReview: z.boolean().optional(),
 })
 
+export const receiptUploadFileSchema = z.object({
+  name: z.string().trim().min(1, 'Receipt file name is required'),
+  size: z.number().int().positive('Receipt file is empty or invalid'),
+  type: z.string().trim().min(1, 'Receipt file type is required'),
+})
+
+export const retryReceiptSchema = z.object({
+  action: z.literal('retry', {
+    errorMap: () => ({ message: 'Retry action must be "retry"' }),
+  }).optional().default('retry'),
+})
+
+export const categoryValueSchema = z.enum(ITEM_CATEGORIES, {
+  errorMap: () => ({ message: 'Category must be one of the supported Google Sheets categories' }),
+})
+
+export const sheetsSyncSchema = z.object({
+  force: z.boolean().optional().default(false),
+  categories: z.record(z.string().min(1), categoryValueSchema).default({}),
+})
+
 export const updateReceiptSchema = z.object({
   storeName: z.string().max(255).nullable().optional(),
+  purchaseDate: z.string().datetime().nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   subtotal: z.number().min(0).nullable().optional(),
   totalTax: z.number().min(0).nullable().optional(),
   discount: z.number().min(0).nullable().optional(),
   grandTotal: z.number().min(0).nullable().optional(),
+  reviewStatus: z.enum(['needs_review', 'approved']).optional(),
+  duplicateOverride: z.boolean().optional(),
+  paidBy: z.string().max(100).nullable().optional(),
+  splitWith: z.string().max(500).nullable().optional(), // JSON-serialized string[]
 })
 
 export const receiptQuerySchema = z.object({
@@ -47,3 +75,6 @@ export type SignInInput = z.infer<typeof signInSchema>
 export type ReceiptItemInput = z.infer<typeof receiptItemSchema>
 export type UpdateReceiptInput = z.infer<typeof updateReceiptSchema>
 export type ReceiptQueryInput = z.infer<typeof receiptQuerySchema>
+export type ReceiptUploadFileInput = z.infer<typeof receiptUploadFileSchema>
+export type RetryReceiptInput = z.infer<typeof retryReceiptSchema>
+export type SheetsSyncInput = z.infer<typeof sheetsSyncSchema>

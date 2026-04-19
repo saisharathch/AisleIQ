@@ -5,11 +5,13 @@ export function calcTotals(items: ReceiptItem[]): ReceiptTotals {
   let subtotal = 0
   let totalTax = 0
   let flaggedCount = 0
+  let confidenceTotal = 0
 
   for (const item of items) {
     subtotal += item.lineTotal ?? inferLineTotal(item) ?? 0
     totalTax += item.tax ?? 0
     if (item.needsReview) flaggedCount++
+    confidenceTotal += item.confidence ?? 0
   }
 
   return {
@@ -19,6 +21,7 @@ export function calcTotals(items: ReceiptItem[]): ReceiptTotals {
     grandTotal: round2(subtotal + totalTax),
     itemCount: items.length,
     flaggedCount,
+    avgConfidence: items.length ? round2(confidenceTotal / items.length) : 0,
   }
 }
 
@@ -80,5 +83,5 @@ export function formatCurrency(value: number | null | undefined): string {
 }
 
 export function round2(n: number): number {
-  return Math.round(n * 100) / 100
+  return Math.round((n + Number.EPSILON) * 100) / 100
 }

@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { receiptItemSchema } from '@/lib/validators'
+import { errorResponse, readJsonBody, validationErrorResponse } from '@/lib/api-errors'
+import { predictLearnedCategory } from '@/lib/category-learning'
+import { refreshDuplicateDetection } from '@/lib/duplicate-detection'
+import { buildReceiptSyncHash, getEditedSyncStatus } from '@/lib/receipt-state'
 
 type Params = { params: Promise<{ id: string }> }
 
-// GET /api/receipts/:id/items
 export async function GET(_req: NextRequest, { params }: Params) {
   const session = await auth()
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return errorResponse(401, 'UNAUTHORIZED', 'You must be signed in.')
 
   const { id } = await params
   const receipt = await db.receipt.findFirst({ where: { id, userId: session.user.id } })
-  if (!receipt) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!receipt) return errorResponse(404, 'RECEIPT_NOT_FOUND', 'Receipt not found.')
 
   const items = await db.receiptItem.findMany({
     where: { receiptId: id },
@@ -22,19 +25,28 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({ ok: true, data: items })
 }
 
-// POST /api/receipts/:id/items — add a new row
 export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth()
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return errorResponse(401, 'UNAUTHORIZED', 'You must be signed in.')
 
   const { id } = await params
-  const receipt = await db.receipt.findFirst({ where: { id, userId: session.user.id } })
-  if (!receipt) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const receipt = await db.receipt.findFirst({
+    where: { id, userId: session.user.id },
+    include: { items: { orderBy: { sortOrder: 'asc' } } },
+  })
+  if (!receipt) return errorResponse(404, 'RECEIPT_NOT_FOUND', 'Receipt not found.')
 
-  const body = await req.json()
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch (err) {
+    if (err instanceof Response) return err
+    throw err
+  }
+
   const parsed = receiptItemSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+    return validationErrorResponse(parsed.error, 'Invalid receipt item.')
   }
 
   const lastItem = await db.receiptItem.findFirst({
@@ -42,6 +54,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     orderBy: { sortOrder: 'desc' },
   })
 
+  const category = parsed.data.category ?? await predictLearnedCategory(session.user.id, parsed.data.item)
   const item = await db.receiptItem.create({
     data: {
       receiptId: id,
@@ -50,6 +63,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       confidence: 1.0,
       needsReview: false,
       ...parsed.data,
+      category,
     },
   })
 
@@ -63,6 +77,17 @@ export async function POST(req: NextRequest, { params }: Params) {
       action: 'create',
     },
   })
+
+  const refreshedItems = [...receipt.items, item]
+  await db.receipt.update({
+    where: { id },
+    data: {
+      syncStatus: getEditedSyncStatus(receipt.syncStatus),
+      syncErrorMessage: null,
+      lastSyncHash: buildReceiptSyncHash(receipt, refreshedItems),
+    },
+  })
+  await refreshDuplicateDetection(id)
 
   return NextResponse.json({ ok: true, data: item }, { status: 201 })
 }

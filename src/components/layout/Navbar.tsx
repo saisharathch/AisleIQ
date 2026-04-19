@@ -12,9 +12,14 @@ export function Navbar() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 font-semibold text-primary">
-          <ShoppingCart className="h-5 w-5" />
-          <span className="text-lg">GroceryBill</span>
+        <Link href="/" className="flex items-center gap-2" >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-600">
+            <ShoppingCart className="h-4 w-4 text-white" />
+          </div>
+          <div className="leading-none">
+            <span className="text-base font-bold tracking-tight text-slate-900">AisleIQ</span>
+            <span className="hidden sm:block text-[10px] text-slate-400 font-normal mt-0.5">Upload receipts. Track smarter.</span>
+          </div>
         </Link>
 
         {/* Nav links */}

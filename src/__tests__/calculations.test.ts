@@ -15,6 +15,7 @@ function makeItem(overrides: Partial<ReceiptItem> = {}): ReceiptItem {
     receiptId: 'r1',
     store: 'Walmart',
     item: 'Test Item',
+    category: 'Other',
     quantity: 1,
     unitPrice: 2.99,
     lineTotal: 2.99,

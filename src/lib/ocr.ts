@@ -2,11 +2,14 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { ParsedReceipt, ParsedReceiptItem } from '@/types'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+const OCR_MODEL = process.env.ANTHROPIC_OCR_MODEL ?? 'claude-haiku-4-5-20251001'
+const OCR_MAX_TOKENS = parseInt(process.env.ANTHROPIC_OCR_MAX_TOKENS ?? '2500', 10)
 
 const RECEIPT_SYSTEM_PROMPT = `You are an expert grocery receipt OCR parser. Extract structured data from receipt images with high accuracy.
 
 Rules:
 - Detect the store name from the header.
+- Detect the purchase date when present. Use ISO 8601 format if you can infer it reliably.
 - Parse each purchased item into: item name, quantity, unit price, line total, tax.
 - If quantity or unit price is missing but line total is present, infer carefully. Set confidence < 0.7 if unsure.
 - Preserve the original item name abbreviations alongside a readable interpretation.
@@ -23,6 +26,7 @@ Rules:
 Return ONLY a valid JSON object matching this schema exactly:
 {
   "storeName": string | null,
+  "purchaseDate": string | null,
   "items": [
     {
       "item": string,
@@ -47,8 +51,8 @@ export async function parseReceiptFromBase64(
   mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
 ): Promise<ParsedReceipt> {
   const response = await client.messages.create({
-    model: 'claude-opus-4-7',
-    max_tokens: 4096,
+    model: OCR_MODEL,
+    max_tokens: OCR_MAX_TOKENS,
     system: RECEIPT_SYSTEM_PROMPT,
     messages: [
       {
@@ -77,8 +81,8 @@ export async function parseReceiptFromBase64(
 
 export async function parseReceiptFromText(rawText: string): Promise<ParsedReceipt> {
   const response = await client.messages.create({
-    model: 'claude-opus-4-7',
-    max_tokens: 4096,
+    model: OCR_MODEL,
+    max_tokens: OCR_MAX_TOKENS,
     system: RECEIPT_SYSTEM_PROMPT,
     messages: [
       {
@@ -118,6 +122,7 @@ function parseOcrResponse(raw: string): ParsedReceipt {
 
   return {
     storeName: parsed.storeName ?? null,
+    purchaseDate: parsed.purchaseDate ?? null,
     items,
     subtotal: parsed.subtotal ?? null,
     totalTax: parsed.totalTax ?? null,

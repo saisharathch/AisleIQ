@@ -2,36 +2,52 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { receiptItemSchema } from '@/lib/validators'
+import { errorResponse, readJsonBody, validationErrorResponse } from '@/lib/api-errors'
+import { buildReceiptSyncHash, getEditedSyncStatus } from '@/lib/receipt-state'
+import { learnCategoryPreference } from '@/lib/category-learning'
+import { refreshDuplicateDetection } from '@/lib/duplicate-detection'
 
 type Params = { params: Promise<{ id: string; itemId: string }> }
 
-async function getAuthorizedItem(receiptId: string, itemId: string, userId: string) {
-  const receipt = await db.receipt.findFirst({ where: { id: receiptId, userId } })
+async function getAuthorizedReceiptWithItem(receiptId: string, itemId: string, userId: string) {
+  const receipt = await db.receipt.findFirst({
+    where: { id: receiptId, userId },
+    include: { items: { orderBy: { sortOrder: 'asc' } } },
+  })
   if (!receipt) return null
-  return db.receiptItem.findFirst({ where: { id: itemId, receiptId } })
+
+  const item = receipt.items.find((candidate) => candidate.id === itemId) ?? null
+  if (!item) return null
+
+  return { receipt, item }
 }
 
-// PATCH /api/receipts/:id/items/:itemId
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = await auth()
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return errorResponse(401, 'UNAUTHORIZED', 'You must be signed in.')
 
   const { id, itemId } = await params
-  const item = await getAuthorizedItem(id, itemId, session.user.id)
-  if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const authorized = await getAuthorizedReceiptWithItem(id, itemId, session.user.id)
+  if (!authorized) return errorResponse(404, 'RECEIPT_ITEM_NOT_FOUND', 'Receipt item not found.')
 
-  const body = await req.json()
+  let body: unknown
+  try {
+    body = await readJsonBody(req)
+  } catch (err) {
+    if (err instanceof Response) return err
+    throw err
+  }
+
   const parsed = receiptItemSchema.partial().safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
+    return validationErrorResponse(parsed.error, 'Invalid receipt item update.')
   }
 
   const updated = await db.receiptItem.update({ where: { id: itemId }, data: parsed.data })
 
-  // Log each changed field
   for (const [field, newValue] of Object.entries(parsed.data)) {
-    const oldValue = (item as Record<string, unknown>)[field]
-    if (oldValue !== newValue) {
+    const oldValue = (authorized.item as Record<string, unknown>)[field]
+    if (String(oldValue ?? '') !== String(newValue ?? '')) {
       await db.editLog.create({
         data: {
           userId: session.user.id,
@@ -46,17 +62,31 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
   }
 
+  if (parsed.data.category && parsed.data.category !== authorized.item.category) {
+    await learnCategoryPreference(session.user.id, updated.item, parsed.data.category)
+  }
+
+  const refreshedItems = authorized.receipt.items.map((item) => (item.id === itemId ? updated : item))
+  await db.receipt.update({
+    where: { id },
+    data: {
+      syncStatus: getEditedSyncStatus(authorized.receipt.syncStatus),
+      syncErrorMessage: null,
+      lastSyncHash: buildReceiptSyncHash(authorized.receipt, refreshedItems),
+    },
+  })
+  await refreshDuplicateDetection(id)
+
   return NextResponse.json({ ok: true, data: updated })
 }
 
-// DELETE /api/receipts/:id/items/:itemId
 export async function DELETE(_req: NextRequest, { params }: Params) {
   const session = await auth()
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session?.user?.id) return errorResponse(401, 'UNAUTHORIZED', 'You must be signed in.')
 
   const { id, itemId } = await params
-  const item = await getAuthorizedItem(id, itemId, session.user.id)
-  if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const authorized = await getAuthorizedReceiptWithItem(id, itemId, session.user.id)
+  if (!authorized) return errorResponse(404, 'RECEIPT_ITEM_NOT_FOUND', 'Receipt item not found.')
 
   await db.receiptItem.delete({ where: { id: itemId } })
 
@@ -66,10 +96,21 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
       receiptId: id,
       receiptItemId: itemId,
       field: 'item',
-      oldValue: item.item,
+      oldValue: authorized.item.item,
       action: 'delete',
     },
   })
+
+  const refreshedItems = authorized.receipt.items.filter((item) => item.id !== itemId)
+  await db.receipt.update({
+    where: { id },
+    data: {
+      syncStatus: getEditedSyncStatus(authorized.receipt.syncStatus),
+      syncErrorMessage: null,
+      lastSyncHash: buildReceiptSyncHash(authorized.receipt, refreshedItems),
+    },
+  })
+  await refreshDuplicateDetection(id)
 
   return NextResponse.json({ ok: true })
 }
