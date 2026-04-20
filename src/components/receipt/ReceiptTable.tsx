@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
-import { Loader2, Trash2, AlertCircle, Copy, Check, MessageSquareText } from 'lucide-react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { Loader2, Trash2, AlertCircle, Copy, Check, MessageSquareText, TrendingUp, TrendingDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatCurrency } from '@/lib/calculations'
@@ -9,22 +9,40 @@ import { ITEM_CATEGORIES } from '@/lib/google-sheets'
 import { cn } from '@/lib/utils'
 import type { ReceiptItem } from '@prisma/client'
 
+interface PriceHistory {
+  avg: number
+  count: number
+}
+
 interface Props {
   items: ReceiptItem[]
   storeName: string | null
   savingId: string | null
+  receiptId?: string
   onUpdate: (itemId: string, field: string, value: unknown) => Promise<void>
   onDelete: (itemId: string) => Promise<void>
 }
 
 type EditableField = 'item' | 'quantity' | 'unitPrice' | 'lineTotal' | 'tax'
 
-export function ReceiptTable({ items, storeName, savingId, onUpdate, onDelete }: Props) {
+export function ReceiptTable({ items, storeName, savingId, receiptId, onUpdate, onDelete }: Props) {
   const [editCell, setEditCell] = useState<{ itemId: string; field: EditableField } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [sourceTooltip, setSourceTooltip] = useState<{ itemId: string; text: string } | null>(null)
+  const [priceHistory, setPriceHistory] = useState<Record<string, PriceHistory>>({})
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (items.length === 0) return
+    const names = [...new Set(items.map((i) => i.item.trim()))].join(',')
+    const params = new URLSearchParams({ names })
+    if (receiptId) params.set('excludeReceiptId', receiptId)
+    fetch(`/api/price-history?${params}`)
+      .then((r) => r.json())
+      .then(({ data }) => setPriceHistory(data ?? {}))
+      .catch(() => undefined)
+  }, [items, receiptId])
 
   function startEdit(item: ReceiptItem, field: EditableField) {
     const raw = item[field]
@@ -159,27 +177,52 @@ export function ReceiptTable({ items, storeName, savingId, onUpdate, onDelete }:
                     {item.store ?? storeName ?? '-'}
                   </td>
 
-                  {columns.map((column) => (
-                    <td
-                      key={column.key}
-                      onClick={() => startEdit(item, column.key)}
-                      className={cn(
-                        'px-4 py-3 cursor-pointer hover:bg-muted/40 rounded transition-colors align-top',
-                        column.numeric && 'text-right',
-                        column.key === 'item' && 'max-w-[220px]',
-                        item.needsReview && column.key !== 'tax' && 'ring-1 ring-inset ring-amber-200/70',
-                      )}
-                    >
-                      <div className={cn('flex items-center gap-1.5', column.numeric && 'justify-end')}>
-                        {item.needsReview && column.key === 'item' && (
-                          <span title="Likely needs human review">
-                            <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                          </span>
+                  {columns.map((column) => {
+                    const hist = column.key === 'unitPrice'
+                      ? priceHistory[item.item.trim().toLowerCase()]
+                      : null
+                    const priceDelta = hist && item.unitPrice != null && hist.count >= 2
+                      ? ((item.unitPrice - hist.avg) / hist.avg) * 100
+                      : null
+
+                    return (
+                      <td
+                        key={column.key}
+                        onClick={() => startEdit(item, column.key)}
+                        className={cn(
+                          'px-4 py-3 cursor-pointer hover:bg-muted/40 rounded transition-colors align-top',
+                          column.numeric && 'text-right',
+                          column.key === 'item' && 'max-w-[220px]',
+                          item.needsReview && column.key !== 'tax' && 'ring-1 ring-inset ring-amber-200/70',
                         )}
-                        <CellContent item={item} field={column.key} />
-                      </div>
-                    </td>
-                  ))}
+                      >
+                        <div className={cn('flex items-center gap-1.5', column.numeric && 'justify-end')}>
+                          {item.needsReview && column.key === 'item' && (
+                            <span title="Likely needs human review">
+                              <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                            </span>
+                          )}
+                          <CellContent item={item} field={column.key} />
+                          {priceDelta !== null && Math.abs(priceDelta) >= 5 && (
+                            <span
+                              title={`${priceDelta > 0 ? 'Up' : 'Down'} ${Math.abs(priceDelta).toFixed(0)}% vs your avg of ${formatCurrency(hist!.avg)}`}
+                              className={cn(
+                                'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold shrink-0',
+                                priceDelta > 0
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                              )}
+                            >
+                              {priceDelta > 0
+                                ? <TrendingUp className="h-2.5 w-2.5" />
+                                : <TrendingDown className="h-2.5 w-2.5" />}
+                              {Math.abs(priceDelta).toFixed(0)}%
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )
+                  })}
 
                   <td className="px-4 py-3 min-w-[160px]">
                     <Select

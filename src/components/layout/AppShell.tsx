@@ -16,7 +16,7 @@ export function AppShell({ title, actions, children }: Props) {
   const [chatOpen, setChatOpen]       = useState(false)
 
   return (
-    <div className="flex h-screen bg-slate-50/60 overflow-hidden">
+    <div className="flex h-screen bg-slate-50/60 dark:bg-slate-950 overflow-hidden">
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <div
@@ -37,15 +37,15 @@ export function AppShell({ title, actions, children }: Props) {
       {/* Content */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/95 backdrop-blur px-4 sm:px-6">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/80 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur px-4 sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden rounded-md p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            className="lg:hidden rounded-md p-1 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <h1 className="text-sm font-semibold text-slate-900 truncate">{title}</h1>
+          <h1 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{title}</h1>
           {actions && (
             <div className="ml-auto flex items-center gap-2">
               {actions}
@@ -69,7 +69,7 @@ export function AppShell({ title, actions, children }: Props) {
             : 'opacity-0 translate-y-4 pointer-events-none'
         }`}
       >
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden"
           style={{ height: '520px' }}>
           {/* Panel header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-teal-600 to-emerald-600">

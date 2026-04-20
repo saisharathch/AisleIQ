@@ -686,6 +686,7 @@ export function ReceiptDetailView({ receipt }: Props) {
             items={items}
             storeName={meta.storeName}
             savingId={saving}
+            receiptId={receipt.id}
             onUpdate={updateItem}
             onDelete={deleteItem}
           />
