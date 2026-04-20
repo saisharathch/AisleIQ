@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { AppShell } from '@/components/layout/AppShell'
 import { BudgetTracker } from '@/components/budget/BudgetTracker'
 import { BudgetAlerts } from '@/components/budget/BudgetAlerts'
+import { computeBudgetAlerts } from '@/lib/shopping-list'
 
 export default async function BudgetsPage() {
   const session = await auth()
@@ -46,26 +47,7 @@ export default async function BudgetsPage() {
     ...categoryActuals.map((c) => c.category),
   ])).sort()
 
-  // Compute budget alerts (≥80% spent)
-  const overallBudget = budgets.find((b) => b.year === year && b.month === month && !b.category)
-  const alerts = []
-
-  if (overallBudget && totalSpend > 0) {
-    const pct = (totalSpend / overallBudget.amount) * 100
-    if (pct >= 80) {
-      alerts.push({ label: 'Overall Monthly Budget', spent: totalSpend, budget: overallBudget.amount, percent: pct })
-    }
-  }
-
-  for (const budget of budgets.filter((b) => b.year === year && b.month === month && b.category)) {
-    const actual = categoryActuals.find((c) => c.category === budget.category)
-    if (actual) {
-      const pct = (actual.spent / budget.amount) * 100
-      if (pct >= 80) {
-        alerts.push({ label: budget.category!, spent: actual.spent, budget: budget.amount, percent: pct })
-      }
-    }
-  }
+  const alerts = computeBudgetAlerts(budgets, categoryActuals, +totalSpend.toFixed(2), year, month)
 
   return (
     <AppShell title="Budgets">

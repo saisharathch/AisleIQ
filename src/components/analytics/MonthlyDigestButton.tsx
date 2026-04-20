@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { FileDown, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { Button } from '@/components/ui/button'
 
 interface MonthlyTrend {
@@ -49,8 +50,10 @@ export function MonthlyDigestButton({
   async function downloadDigest() {
     setLoading(true)
     try {
-      const { jsPDF } = await import('jspdf')
-      const autoTable = (await import('jspdf-autotable')).default
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ])
 
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
       const now = new Date()
@@ -196,6 +199,9 @@ export function MonthlyDigestButton({
 
       const fileName = `AisleIQ-Digest-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.pdf`
       doc.save(fileName)
+    } catch (err) {
+      console.error('[MonthlyDigestButton] PDF generation failed:', err)
+      toast.error('Failed to generate PDF. Please try again.')
     } finally {
       setLoading(false)
     }

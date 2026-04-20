@@ -39,9 +39,9 @@ export function ReceiptTable({ items, storeName, savingId, receiptId, onUpdate, 
     const params = new URLSearchParams({ names })
     if (receiptId) params.set('excludeReceiptId', receiptId)
     fetch(`/api/price-history?${params}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(`price-history ${r.status}`); return r.json() })
       .then(({ data }) => setPriceHistory(data ?? {}))
-      .catch(() => undefined)
+      .catch((err) => console.warn('[ReceiptTable] price-history fetch failed:', err))
   }, [items, receiptId])
 
   function startEdit(item: ReceiptItem, field: EditableField) {
