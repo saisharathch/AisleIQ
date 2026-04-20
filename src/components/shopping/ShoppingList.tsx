@@ -31,20 +31,36 @@ function categoryColor(cat: string | null) {
   return CATEGORY_COLORS[cat ?? 'Other'] ?? CATEGORY_COLORS['Other']
 }
 
+const STORAGE_KEY = 'aisleiq-shopping-checked'
+
 export function ShoppingList() {
   const [items, setItems] = useState<SuggestedItem[]>([])
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('All')
+
+  // Restore checked state from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) setChecked(new Set(JSON.parse(stored) as string[]))
+    } catch { /* ignore */ }
+  }, [])
 
   async function load() {
     setLoading(true)
-    const res = await fetch('/api/shopping-list')
-    if (res.ok) {
+    setError(null)
+    try {
+      const res = await fetch('/api/shopping-list')
+      if (!res.ok) throw new Error(`Server error ${res.status}`)
       const { data } = await res.json()
       setItems(data)
+    } catch (e) {
+      setError((e as Error).message ?? 'Failed to load shopping list')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => { load() }, [])
@@ -53,8 +69,14 @@ export function ShoppingList() {
     setChecked((prev) => {
       const next = new Set(prev)
       next.has(name) ? next.delete(name) : next.add(name)
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...next])) } catch { /* ignore */ }
       return next
     })
+  }
+
+  function clearChecked() {
+    setChecked(new Set())
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
   }
 
   const categories = ['All', ...Array.from(new Set(items.map((i) => i.category ?? 'Other')))]
@@ -77,7 +99,7 @@ export function ShoppingList() {
         </div>
         <div className="flex items-center gap-2">
           {checked.size > 0 && (
-            <Button size="sm" variant="outline" onClick={() => setChecked(new Set())} className="text-xs">
+            <Button size="sm" variant="outline" onClick={clearChecked} className="text-xs">
               Clear all checks ({checked.size})
             </Button>
           )}
@@ -124,6 +146,11 @@ export function ShoppingList() {
         <div className="flex items-center justify-center py-16 text-slate-400">
           <Loader2 className="h-6 w-6 animate-spin mr-2" />
           Loading your shopping history...
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
+          <p className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p>
+          <Button size="sm" variant="outline" onClick={load}>Try again</Button>
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400 space-y-2">

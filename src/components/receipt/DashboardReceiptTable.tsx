@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
 import {
-  ArrowUpRight, Trash2, CheckCircle2, AlertCircle, XCircle, Loader2, Clock,
+  ArrowUpRight, Trash2, CheckCircle2, AlertCircle, XCircle, Loader2, Clock, ReceiptText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,14 +30,34 @@ interface Row {
 
 function StatusPill({ status, reviewStatus }: { status: string; reviewStatus?: string | null }) {
   if (status === 'failed')
-    return <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-600"><XCircle className="h-3 w-3" />Failed</span>
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 text-[11px] font-semibold text-rose-600 dark:text-rose-400 ring-1 ring-rose-100 dark:ring-rose-900/50">
+        <XCircle className="h-3 w-3" />Failed
+      </span>
+    )
   if (status === 'processing')
-    return <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600"><Loader2 className="h-3 w-3 animate-spin" />Processing</span>
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 ring-1 ring-blue-100 dark:ring-blue-900/50">
+        <Loader2 className="h-3 w-3 animate-spin" />Processing
+      </span>
+    )
   if (status === 'queued' || status === 'pending')
-    return <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500"><Clock className="h-3 w-3" />Queued</span>
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 ring-1 ring-slate-200 dark:ring-slate-700">
+        <Clock className="h-3 w-3" />Queued
+      </span>
+    )
   if (reviewStatus === 'approved')
-    return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"><CheckCircle2 className="h-3 w-3" />Approved</span>
-  return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"><AlertCircle className="h-3 w-3" />Needs Review</span>
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-100 dark:ring-emerald-900/50">
+        <CheckCircle2 className="h-3 w-3" />Approved
+      </span>
+    )
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400 ring-1 ring-amber-100 dark:ring-amber-900/50">
+      <AlertCircle className="h-3 w-3" />Needs Review
+    </span>
+  )
 }
 
 function DeleteDialog({
@@ -48,14 +68,14 @@ function DeleteDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm glass border-0 shadow-2xl">
         <DialogHeader>
-          <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-rose-50">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-50 to-rose-100 dark:from-rose-950/40 dark:to-rose-900/20 ring-1 ring-rose-100 dark:ring-rose-800/30">
             <Trash2 className="h-5 w-5 text-rose-500" />
           </div>
           <DialogTitle className="text-center">Delete receipt?</DialogTitle>
           <DialogDescription className="text-center">
-            <span className="font-medium text-slate-700">{storeName ?? 'This receipt'}</span> will be permanently deleted. This cannot be undone.
+            <span className="font-medium text-slate-700 dark:text-slate-300">{storeName ?? 'This receipt'}</span> will be permanently deleted. This cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex-col-reverse sm:flex-row gap-2 pt-2">
@@ -89,41 +109,47 @@ function TableRow({ row }: { row: Row }) {
 
   return (
     <>
-      <tr className="group border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
-        <td className="py-3 pl-4 pr-3">
-          <div className="font-medium text-slate-900 text-sm truncate max-w-[180px]">
+      <tr className="group relative border-b border-slate-100 dark:border-slate-800/60 hover:bg-teal-50/30 dark:hover:bg-teal-950/10 transition-colors duration-150">
+        {/* Left accent on hover */}
+        <td className="relative py-3 pl-4 pr-3">
+          <span className="absolute left-0 inset-y-2 w-0.5 rounded-full bg-teal-500 scale-y-0 group-hover:scale-y-100 transition-transform origin-center duration-200" />
+          <div className="font-semibold text-slate-900 dark:text-slate-100 text-sm truncate max-w-[180px]">
             {row.storeName ?? 'Unknown Store'}
           </div>
           {row.duplicateOfReceiptId && (
-            <span className="text-[10px] text-amber-600 font-medium">Possible duplicate</span>
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">Possible duplicate</span>
           )}
         </td>
-        <td className="px-3 py-3 text-sm text-slate-500 whitespace-nowrap">{date}</td>
-        <td className="px-3 py-3 text-sm text-slate-500 text-center">
-          {row.status === 'done' ? (row._count?.items ?? 0) : '—'}
+        <td className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">{date}</td>
+        <td className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400 text-center font-medium">
+          {row.status === 'done' ? (row._count?.items ?? 0) : <span className="text-slate-300 dark:text-slate-600">—</span>}
         </td>
-        <td className="px-3 py-3 text-sm font-semibold text-slate-900 text-right whitespace-nowrap">
-          {row.status === 'done' && row.grandTotal != null ? `$${row.grandTotal.toFixed(2)}` : '—'}
+        <td className="px-3 py-3 text-sm font-bold text-slate-900 dark:text-slate-100 text-right whitespace-nowrap">
+          {row.status === 'done' && row.grandTotal != null
+            ? <span className="text-teal-700 dark:text-teal-400">${row.grandTotal.toFixed(2)}</span>
+            : <span className="text-slate-300 dark:text-slate-600">—</span>}
         </td>
         <td className="px-3 py-3">
           <StatusPill status={row.status} reviewStatus={row.reviewStatus} />
         </td>
         <td className="px-3 py-3">
           {row.syncStatus === 'synced' && (
-            <span className="text-[11px] text-emerald-600 font-medium">Sheets ✓</span>
+            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+              <CheckCircle2 className="h-3 w-3" />Sheets
+            </span>
           )}
         </td>
         <td className="py-3 pl-3 pr-4">
           <div className="flex items-center gap-1 justify-end">
             <Link
               href={`/receipts/${row.id}`}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 transition-colors"
+              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/50 transition-all hover:-translate-y-0.5"
             >
               View <ArrowUpRight className="h-3 w-3" />
             </Link>
             <button
               onClick={() => setConfirmOpen(true)}
-              className="rounded-md p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 hover:bg-rose-50 transition-all"
+              className="rounded-lg p-1.5 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all"
               aria-label="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -146,7 +172,6 @@ interface Props {
   total: number
   activeTab: string
   hasFilters: boolean
-  // Raw params so the client component can build its own URLs
   search: string
   from: string
   to: string
@@ -184,21 +209,24 @@ export function DashboardReceiptTable({
     p.set('page', String(newPage))
     return `/dashboard?${p.toString()}`
   }
+
   return (
     <div className="space-y-3">
       {/* Section header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Recent Receipts</h2>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Recent Receipts</h2>
           <p className="text-xs text-slate-400 mt-0.5">{total} total</p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="flex items-center gap-1 rounded-xl bg-slate-100 dark:bg-slate-800/60 p-1">
           {TABS.map((tab) => {
             const isActive = tab.label === activeTab
             return (
               <Link key={tab.label} href={buildFilterUrl(tab.status, tab.review)}>
-                <span className={`block px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  isActive ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                <span className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                  isActive
+                    ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}>
                   {tab.label}
                 </span>
@@ -209,24 +237,29 @@ export function DashboardReceiptTable({
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white py-16 text-center">
-          <p className="text-sm font-medium text-slate-500">No receipts found</p>
-          <p className="text-xs text-slate-400 mt-1">Try adjusting the filters</p>
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 py-20 text-center space-y-3">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 shadow-sm">
+            <ReceiptText className="h-8 w-8 text-slate-300 dark:text-slate-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No receipts found</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Try adjusting the filters or upload a new receipt</p>
+          </div>
         </div>
       ) : (
         <>
           {/* Desktop table */}
-          <div className="hidden sm:block rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+          <div className="hidden sm:block rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 overflow-hidden shadow-sm">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80">
-                  <th className="py-2.5 pl-4 pr-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Store</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Date</th>
-                  <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400">Items</th>
-                  <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</th>
-                  <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Sync</th>
-                  <th className="py-2.5 pl-3 pr-4" />
+                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/30">
+                  <th className="py-3 pl-4 pr-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Store</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Date</th>
+                  <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wider text-slate-400">Items</th>
+                  <th className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">Total</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Status</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400">Sync</th>
+                  <th className="py-3 pl-3 pr-4" />
                 </tr>
               </thead>
               <tbody>
@@ -245,13 +278,13 @@ export function DashboardReceiptTable({
             <div className="flex items-center justify-center gap-2 pt-1">
               {page > 1 && (
                 <Link href={buildPageUrl(page - 1)}>
-                  <Button variant="outline" size="sm">Previous</Button>
+                  <Button variant="outline" size="sm" className="rounded-xl hover:-translate-y-0.5 transition-transform">Previous</Button>
                 </Link>
               )}
-              <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
+              <span className="text-xs text-slate-500 font-medium px-3">Page {page} of {totalPages}</span>
               {page < totalPages && (
                 <Link href={buildPageUrl(page + 1)}>
-                  <Button variant="outline" size="sm">Next</Button>
+                  <Button variant="outline" size="sm" className="rounded-xl hover:-translate-y-0.5 transition-transform">Next</Button>
                 </Link>
               )}
             </div>

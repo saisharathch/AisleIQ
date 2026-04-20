@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { errorResponse } from '@/lib/api-errors'
+import { buildPriceHistoryMap } from '@/lib/shopping-list'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return errorResponse(401, 'UNAUTHORIZED', 'You must be signed in.')
 
-  const names = req.nextUrl.searchParams.get('names')?.split(',').filter(Boolean) ?? []
+  const rawNames = req.nextUrl.searchParams.get('names')?.split(',') ?? []
+  const names = rawNames
+    .map((n) => n.trim())
+    .filter((n) => n.length > 0 && n.length <= 200)
+    .slice(0, 100)
   const excludeReceiptId = req.nextUrl.searchParams.get('excludeReceiptId') ?? undefined
 
   if (names.length === 0) return NextResponse.json({ ok: true, data: {} })
@@ -28,18 +33,7 @@ export async function GET(req: NextRequest) {
     select: { item: true, unitPrice: true },
   })
 
-  const priceMap: Record<string, number[]> = {}
-  for (const pi of pastItems) {
-    const key = pi.item.trim().toLowerCase()
-    if (!priceMap[key]) priceMap[key] = []
-    priceMap[key].push(pi.unitPrice!)
-  }
-
-  const result: Record<string, { avg: number; count: number }> = {}
-  for (const [key, prices] of Object.entries(priceMap)) {
-    const avg = prices.reduce((a, b) => a + b, 0) / prices.length
-    result[key] = { avg: +avg.toFixed(4), count: prices.length }
-  }
+  const result = buildPriceHistoryMap(pastItems as Array<{ item: string; unitPrice: number | null }>)
 
   return NextResponse.json({ ok: true, data: result })
 }

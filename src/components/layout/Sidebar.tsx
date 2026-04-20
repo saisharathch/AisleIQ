@@ -40,36 +40,42 @@ export function Sidebar({ onClose }: Props) {
     href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
   return (
-    <aside className="flex h-full w-60 flex-col border-r border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950">
+    <aside className="flex h-full w-60 flex-col border-r border-slate-100 dark:border-slate-800/60 bg-white dark:bg-slate-950">
       {/* Logo */}
-      <div className="flex h-14 items-center justify-between px-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
-        <Link href="/dashboard" className="flex items-center gap-2.5" onClick={onClose}>
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-600">
-            <ShoppingCart className="h-4 w-4 text-white" />
+      <div className="flex h-14 items-center justify-between px-5 border-b border-slate-100 dark:border-slate-800/60 shrink-0">
+        <Link href="/dashboard" className="flex items-center gap-2.5 group" onClick={onClose}>
+          <div className="relative">
+            <div className="absolute inset-0 rounded-lg bg-teal-500/30 blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="relative flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 shadow-sm">
+              <ShoppingCart className="h-4 w-4 text-white" />
+            </div>
           </div>
-          <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">AisleIQ</span>
+          <span className="text-sm font-bold tracking-tight gradient-text">AisleIQ</span>
         </Link>
         {onClose && (
-          <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-slate-700">
+          <button
+            onClick={onClose}
+            className="lg:hidden text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md p-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+          >
             <X className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4">
         {/* Upload CTA */}
         <Link
           href="/receipts"
           onClick={onClose}
-          className="flex items-center justify-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-700 transition-colors"
+          className="group flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 px-3 py-2.5 text-sm font-semibold text-white shadow-md hover:shadow-lg hover:from-teal-500 hover:to-emerald-500 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 glow-teal-sm"
         >
-          <Upload className="h-4 w-4" />
+          <Upload className="h-4 w-4 group-hover:scale-110 transition-transform" />
           Receipt Inbox
         </Link>
 
         {/* Primary nav */}
         <nav className="space-y-0.5">
-          <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
             Navigation
           </p>
           {PRIMARY_NAV.map((item) => {
@@ -79,13 +85,18 @@ export function Sidebar({ onClose }: Props) {
                 key={item.label}
                 href={item.href}
                 onClick={onClose}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-150 ${
                   active
-                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-100'
                 }`}
               >
-                <item.icon className={`h-4 w-4 shrink-0 ${active ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 dark:text-slate-500'}`} />
+                {active && (
+                  <span className="absolute left-0 inset-y-1.5 w-0.5 rounded-full bg-teal-500" />
+                )}
+                <item.icon className={`h-4 w-4 shrink-0 transition-transform ${
+                  active ? 'text-teal-600 dark:text-teal-400 scale-110' : 'text-slate-400 dark:text-slate-500'
+                }`} />
                 {item.label}
               </Link>
             )
@@ -94,7 +105,7 @@ export function Sidebar({ onClose }: Props) {
 
         {/* Secondary nav */}
         <nav className="space-y-0.5">
-          <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
             Integrations
           </p>
           {SECONDARY_NAV.map((item) => {
@@ -104,13 +115,18 @@ export function Sidebar({ onClose }: Props) {
                 key={item.label}
                 href={item.href}
                 onClick={onClose}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-150 ${
                   active
-                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-100'
                 }`}
               >
-                <item.icon className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+                {active && (
+                  <span className="absolute left-0 inset-y-1.5 w-0.5 rounded-full bg-teal-500" />
+                )}
+                <item.icon className={`h-4 w-4 shrink-0 transition-transform ${
+                  active ? 'text-teal-600 dark:text-teal-400 scale-110' : 'text-slate-400 dark:text-slate-500'
+                }`} />
                 {item.label}
               </Link>
             )
@@ -119,7 +135,7 @@ export function Sidebar({ onClose }: Props) {
             <Link
               href="/admin"
               onClick={onClose}
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-slate-100 transition-all duration-150"
             >
               <ShieldCheck className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
               Admin
@@ -129,14 +145,14 @@ export function Sidebar({ onClose }: Props) {
       </div>
 
       {/* User section */}
-      <div className="border-t border-slate-100 dark:border-slate-800 p-3 shrink-0 space-y-2">
+      <div className="border-t border-slate-100 dark:border-slate-800/60 p-3 shrink-0 space-y-2">
         {/* Theme toggle */}
-        <div className="flex items-center justify-between px-2">
+        <div className="flex items-center justify-between px-2 py-1">
           <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Theme</span>
           <ThemeToggle />
         </div>
-        <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">
+        <div className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 text-white text-xs font-bold shrink-0 shadow-sm">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
@@ -147,7 +163,7 @@ export function Sidebar({ onClose }: Props) {
           </div>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0"
+            className="text-slate-300 hover:text-rose-500 dark:hover:text-rose-400 transition-colors shrink-0 rounded-md p-1 hover:bg-rose-50 dark:hover:bg-rose-950/30"
             title="Sign out"
           >
             <LogOut className="h-4 w-4" />

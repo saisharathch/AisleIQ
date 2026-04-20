@@ -25,16 +25,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    const stored = localStorage.getItem('aisleiq-theme') as Theme | null
-    if (stored) setThemeState(stored)
+    try {
+      const stored = localStorage.getItem('aisleiq-theme')
+      if (stored === 'light' || stored === 'dark' || stored === 'system') {
+        setThemeState(stored)
+      }
+    } catch { /* localStorage blocked (private mode, etc.) */ }
   }, [])
 
   useEffect(() => {
     const root = document.documentElement
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
 
     function apply(t: Theme) {
-      const dark = t === 'dark' || (t === 'system' && mq.matches)
+      const dark = t === 'dark' || (t === 'system' && (mq?.matches ?? false))
       root.classList.toggle('dark', dark)
       setResolvedTheme(dark ? 'dark' : 'light')
     }
@@ -42,13 +46,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     apply(theme)
 
     const onChange = () => { if (theme === 'system') apply('system') }
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
+    mq?.addEventListener('change', onChange)
+    return () => mq?.removeEventListener('change', onChange)
   }, [theme])
 
   function setTheme(t: Theme) {
     setThemeState(t)
-    localStorage.setItem('aisleiq-theme', t)
+    try { localStorage.setItem('aisleiq-theme', t) } catch { /* ignore */ }
   }
 
   return (

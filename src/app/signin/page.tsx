@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
-import { ShoppingCart, Loader2 } from 'lucide-react'
+import { ShoppingCart, Loader2, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -46,34 +46,47 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-primary/5 to-background p-4">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden p-4">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-teal-50 via-white to-emerald-50/60 dark:from-slate-950 dark:via-slate-900 dark:to-teal-950/30" />
+
+      {/* Decorative blobs */}
+      <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-teal-200/30 dark:bg-teal-900/20 blur-3xl animate-float" />
+      <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-emerald-200/30 dark:bg-emerald-900/20 blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[600px] w-[600px] rounded-full bg-teal-100/20 dark:bg-teal-900/10 blur-3xl pointer-events-none" />
+
+      <div className="relative z-10 w-full max-w-sm animate-slide-up">
         {/* Logo */}
-        <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-600 shadow-sm">
-            <ShoppingCart className="h-6 w-6 text-white" />
+        <div className="flex flex-col items-center gap-4 mb-8">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-2xl bg-teal-500/30 blur-lg animate-pulse-glow" />
+            <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 shadow-lg">
+              <ShoppingCart className="h-7 w-7 text-white" />
+            </div>
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">AisleIQ</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Upload receipts. Track smarter. Spend better.</p>
+            <h1 className="text-3xl font-bold tracking-tight gradient-text">AisleIQ</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Upload receipts. Track smarter. Spend better.
+            </p>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card shadow-sm p-6 space-y-4">
+        {/* Form card */}
+        <div className="glass shadow-2xl rounded-2xl p-7 space-y-5">
           {/* Google */}
           {allowGoogle && (
             <>
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                className="w-full gap-2"
                 onClick={handleGoogle}
                 disabled={googleLoading}
+                className="group relative w-full flex items-center justify-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 shadow-sm hover:shadow-md hover:border-teal-300 hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {googleLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <svg className="h-4 w-4 shrink-0 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -81,14 +94,14 @@ export default function SignInPage() {
                   </svg>
                 )}
                 Continue with Google
-              </Button>
+              </button>
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+                  <span className="w-full border-t border-slate-200 dark:border-slate-700" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">or</span>
+                  <span className="bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm px-3 text-slate-400 rounded-full">or</span>
                 </div>
               </div>
             </>
@@ -96,22 +109,25 @@ export default function SignInPage() {
 
           {/* Email/password form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-slate-700 dark:text-slate-300 text-xs font-semibold uppercase tracking-wide">Email</Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
                 autoComplete="email"
+                className="bg-white/60 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 transition-all rounded-xl"
                 {...register('email')}
               />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+              {errors.email && (
+                <p className="text-xs text-destructive animate-slide-up">{errors.email.message}</p>
+              )}
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                <Label htmlFor="password" className="text-slate-700 dark:text-slate-300 text-xs font-semibold uppercase tracking-wide">Password</Label>
+                <Link href="/forgot-password" className="text-xs text-teal-600 hover:text-teal-700 dark:text-teal-400 hover:underline transition-colors">
                   Forgot password?
                 </Link>
               </div>
@@ -120,21 +136,34 @@ export default function SignInPage() {
                 type="password"
                 placeholder="••••••••"
                 autoComplete="current-password"
+                className="bg-white/60 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 transition-all rounded-xl"
                 {...register('password')}
               />
-              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+              {errors.password && (
+                <p className="text-xs text-destructive animate-slide-up">{errors.password.message}</p>
+              )}
             </div>
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Sign in
-            </Button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="group relative w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:shadow-lg hover:from-teal-500 hover:to-emerald-500 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none glow-teal-sm"
+            >
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+                </>
+              )}
+            </button>
           </form>
         </div>
 
-        <p className="text-center text-sm text-muted-foreground mt-4">
+        <p className="text-center text-sm text-slate-500 dark:text-slate-400 mt-5">
           Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-primary hover:underline font-medium">
+          <Link href="/signup" className="font-semibold text-teal-600 hover:text-teal-700 dark:text-teal-400 hover:underline transition-colors">
             Sign up free
           </Link>
         </p>

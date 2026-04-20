@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { getAllowedSignupEmails, isSelfSignupEnabled } from '@/lib/env'
 import { signUpSchema } from '@/lib/validators'
+import { createEmailVerificationToken, buildVerificationUrl } from '@/lib/tokens'
+import { sendEmail, buildVerificationEmail } from '@/lib/email'
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,6 +32,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Check if this email came from a valid invite
+    const invite = await db.invite.findFirst({
+      where: { email: normalizedEmail, acceptedAt: null, expiresAt: { gt: new Date() } },
+    })
+
     const existing = await db.user.findUnique({ where: { email: normalizedEmail } })
     if (existing) {
       return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
@@ -37,8 +44,27 @@ export async function POST(req: NextRequest) {
 
     const hashed = await bcrypt.hash(password, 12)
     const user = await db.user.create({
-      data: { name, email: normalizedEmail, password: hashed, emailVerified: new Date() },
+      // emailVerified is null — user must verify before it's set
+      data: { name, email: normalizedEmail, password: hashed, emailVerified: null },
     })
+
+    // Mark invite accepted if applicable
+    if (invite) {
+      await db.invite.update({
+        where: { id: invite.id },
+        data: { acceptedAt: new Date() },
+      })
+    }
+
+    // Send verification email (fire-and-forget; never block signup on email failure)
+    try {
+      const token = await createEmailVerificationToken(normalizedEmail)
+      const url = buildVerificationUrl(normalizedEmail, token)
+      const { html, text, subject } = buildVerificationEmail({ name: name ?? '', url })
+      await sendEmail({ to: normalizedEmail, subject, html, text })
+    } catch (emailErr) {
+      console.error('[register] Failed to send verification email:', emailErr)
+    }
 
     return NextResponse.json({ ok: true, userId: user.id }, { status: 201 })
   } catch (err) {

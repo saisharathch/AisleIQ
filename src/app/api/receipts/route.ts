@@ -10,6 +10,7 @@ import { enqueueJob, processQueuedReceiptInline } from '@/lib/queue'
 import { rateLimit } from '@/lib/rate-limit'
 import { errorResponse, validationErrorResponse } from '@/lib/api-errors'
 import { receiptQuerySchema, receiptUploadFileSchema } from '@/lib/validators'
+import { scanFile } from '@/lib/file-scanner'
 
 // GET /api/receipts - list receipts for current user
 export async function GET(req: NextRequest) {
@@ -84,8 +85,14 @@ export async function POST(req: NextRequest) {
     mimeType = 'image/jpeg'
   }
 
-  // Exact duplicate detection via SHA-256 of raw file bytes
+  // SHA-256 hash for duplicate detection and VirusTotal lookup
   const fileHash = createHash('sha256').update(Buffer.from(arrayBuffer)).digest('hex')
+
+  // Safety scan: magic bytes + entropy + optional VirusTotal reputation
+  const scan = await scanFile(buffer, mimeType, fileHash)
+  if (!scan.safe) {
+    return errorResponse(422, 'FILE_REJECTED', scan.reason ?? 'The uploaded file failed our safety check.')
+  }
 
   const existingReceipt = await db.receipt.findFirst({
     where: { userId: session.user.id, fileHash },
