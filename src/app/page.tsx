@@ -44,6 +44,8 @@ const steps = [
 ]
 
 export default function LandingPage() {
+  const allowSelfSignup = true
+
   return (
     <div className="flex min-h-screen flex-col">
       <Navbar />
@@ -164,10 +166,10 @@ export default function LandingPage() {
         <div className="container max-w-xl">
           <h2 className="text-3xl font-bold mb-4">Ready to tame your grocery bills?</h2>
           <p className="text-muted-foreground mb-8">Start for free — no credit card required.</p>
-          <Link href="/signup">
+          <Link href={allowSelfSignup ? '/signup' : '/signin'}>
             <Button size="lg" className="gap-2">
               <Upload className="h-4 w-4" />
-              Upload your first receipt
+              {allowSelfSignup ? 'Upload your first receipt' : 'Open the beta app'}
             </Button>
           </Link>
         </div>

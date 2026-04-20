@@ -7,6 +7,7 @@
     "worker": "tsx src/worker/index.ts",
     "build": "next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
@@ -14,6 +15,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },

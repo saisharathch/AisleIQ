@@ -1,5 +1,7 @@
 import { parseReceiptFromBase64, parseReceiptFromText, normalizeMediaType } from './ocr'
 import { db } from './db'
+import { getStorageType } from './env'
+import { resolveStorageKey } from './storage'
 import type { ParsedReceipt } from '@/types'
 import sharp from 'sharp'
 
@@ -23,8 +25,7 @@ export async function parseReceiptOcr(receiptId: string): Promise<ParsedReceipt>
   let buffer: Buffer
   let mimeType = receipt.fileType
 
-  const storageType = process.env.STORAGE_TYPE ?? 'local'
-  if (storageType === 's3') {
+  if (getStorageType() === 's3') {
     const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3')
     const accessKeyId = process.env.AWS_ACCESS_KEY_ID
     const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
@@ -38,10 +39,9 @@ export async function parseReceiptOcr(receiptId: string): Promise<ParsedReceipt>
       region: process.env.AWS_REGION ?? 'us-east-1',
       endpoint: process.env.AWS_S3_ENDPOINT,
       credentials: { accessKeyId, secretAccessKey },
+      forcePathStyle: Boolean(process.env.AWS_S3_ENDPOINT),
     })
-    const key = receipt.fileUrl.startsWith('https://')
-      ? receipt.fileUrl.split('/').slice(3).join('/')
-      : receipt.fileUrl
+    const key = resolveStorageKey(receipt)
     const resp = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
     const chunks: Uint8Array[] = []
     for await (const chunk of resp.Body as AsyncIterable<Uint8Array>) chunks.push(chunk)
@@ -49,7 +49,7 @@ export async function parseReceiptOcr(receiptId: string): Promise<ParsedReceipt>
   } else {
     const fs = await import('fs/promises')
     const path = await import('path')
-    const localPath = path.join(process.cwd(), 'public', receipt.fileUrl)
+    const localPath = path.join(process.cwd(), 'public', receipt.fileUrl.replace(/^\//, ''))
     buffer = await fs.readFile(localPath)
   }
 

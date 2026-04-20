@@ -110,6 +110,7 @@ async function readJson(res: Response) {
 describe('receipt pilot routes', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    process.env.OCR_INLINE_FALLBACK = 'false'
     mockedAuth.mockResolvedValue(makeSession() as never)
     mockedRateLimit.mockReturnValue({ ok: true } as never)
     mockedDb.receipt.findFirst.mockResolvedValue(null)
@@ -126,6 +127,10 @@ describe('receipt pilot routes', () => {
     } as never)
     mockedEnqueueJob.mockResolvedValue(undefined)
     mockedRefreshDuplicateDetection.mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    delete process.env.OCR_INLINE_FALLBACK
   })
 
   it('uploads a receipt and queues OCR processing', async () => {
@@ -155,7 +160,11 @@ describe('receipt pilot routes', () => {
   })
 
   it('blocks duplicate uploads that are already queued or processing', async () => {
-    mockedDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-active' })
+    mockedDb.receipt.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'receipt-active',
+      })
 
     const form = new FormData()
     form.append('file', new File(['receipt'], 'receipt.jpg', { type: 'image/jpeg' }))

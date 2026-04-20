@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { uploadReceiptToSheets, categorizeItem } from '@/lib/google-sheets'
+import { uploadReceiptToSheets, categorizeItem, getSheetsOwnerUser } from '@/lib/google-sheets'
 import { errorResponse, readJsonBody, validationErrorResponse } from '@/lib/api-errors'
 import { receiptItemSchema, sheetsSyncSchema } from '@/lib/validators'
 import { learnCategoryPreference } from '@/lib/category-learning'
 import { buildReceiptSyncHash } from '@/lib/receipt-state'
+import { getGoogleSheetsOwnerEmail } from '@/lib/env'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireAuth().catch(() => null)
@@ -138,10 +139,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   })
 
-  const dbUser = await db.user.findUnique({
-    where: { id: user.id },
-    select: { sheetsSpreadsheetId: true },
-  })
+  const configuredOwnerEmail = getGoogleSheetsOwnerEmail()
+  const sheetsOwner = configuredOwnerEmail
+    ? await getSheetsOwnerUser()
+    : await db.user.findUnique({
+        where: { id: user.id },
+        select: { id: true, email: true, sheetsSpreadsheetId: true },
+      })
+
+  if (configuredOwnerEmail && !sheetsOwner) {
+    return errorResponse(
+      503,
+      'SHEETS_OWNER_NOT_READY',
+      `The configured Google Sheets owner (${configuredOwnerEmail}) has not created an app account yet.`,
+    )
+  }
 
   const rows = itemsWithCategories.map((item) => ({
     receiptId: receipt.id,
@@ -160,15 +172,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const spreadsheetId = await uploadReceiptToSheets(
-      user.id,
-      dbUser?.sheetsSpreadsheetId ?? null,
+      sheetsOwner!.id,
+      sheetsOwner?.sheetsSpreadsheetId ?? null,
       rows,
     )
 
     const syncedAt = new Date()
     await Promise.all([
       db.user.update({
-        where: { id: user.id },
+        where: { id: sheetsOwner!.id },
         data: { sheetsSpreadsheetId: spreadsheetId },
       }),
       db.receipt.update({
@@ -189,6 +201,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       sheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}`,
       syncedAt: syncedAt.toISOString(),
       syncStatus: 'synced',
+      ownerEmail: sheetsOwner?.email ?? user.email ?? null,
     })
   } catch (err: unknown) {
     const code = err instanceof Error ? err.message : ''
@@ -200,6 +213,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       PERMISSION_DENIED: ['Google denied access to Sheets. Check that your account has Sheets enabled.', 403],
       NO_REFRESH_TOKEN: ['Cannot silently refresh Google token. Please sign in with Google again.', 401],
       SHEET_NOT_FOUND: ['The spreadsheet was deleted. A new one will be created on the next sync. Please try again.', 404],
+      SHEETS_OWNER_NOT_READY: ['The shared Google Sheets owner account is not ready yet.', 503],
     }
 
     await db.receipt.update({

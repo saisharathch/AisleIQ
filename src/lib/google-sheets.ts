@@ -1,4 +1,5 @@
 import { db } from './db'
+import { getGoogleSheetsOwnerEmail } from './env'
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -31,6 +32,16 @@ export function categorizeItem(itemName: string): ItemCategory {
     if (keywords.some((keyword) => lower.includes(keyword))) return category as ItemCategory
   }
   return 'Other'
+}
+
+export async function getSheetsOwnerUser() {
+  const ownerEmail = getGoogleSheetsOwnerEmail()
+  if (!ownerEmail) return null
+
+  return db.user.findUnique({
+    where: { email: ownerEmail },
+    select: { id: true, email: true, sheetsSpreadsheetId: true },
+  })
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_at: number }> {
@@ -160,11 +171,11 @@ export interface SheetReceiptRow {
 }
 
 export async function uploadReceiptToSheets(
-  userId: string,
+  googleAccountUserId: string,
   existingSpreadsheetId: string | null,
   rows: SheetReceiptRow[],
 ): Promise<string> {
-  const token = await getValidAccessToken(userId)
+  const token = await getValidAccessToken(googleAccountUserId)
 
   let sheetId = existingSpreadsheetId
 

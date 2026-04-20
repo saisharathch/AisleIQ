@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { deleteFile } from '@/lib/storage'
+import { deleteFile, resolveStorageKey } from '@/lib/storage'
 import { updateReceiptSchema } from '@/lib/validators'
 import { errorResponse, readJsonBody, validationErrorResponse } from '@/lib/api-errors'
 import { buildReceiptSyncHash, getEditedSyncStatus } from '@/lib/receipt-state'
@@ -129,10 +129,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
   if (!receipt) return errorResponse(404, 'RECEIPT_NOT_FOUND', 'Receipt not found.')
 
   if (receipt.fileUrl) {
-    const key = receipt.fileUrl.startsWith('/uploads/')
-      ? receipt.fileUrl.replace('/uploads/', '')
-      : receipt.fileUrl
-    await deleteFile(key)
+    await deleteFile(resolveStorageKey(receipt))
   }
 
   await db.receipt.delete({ where: { id } })

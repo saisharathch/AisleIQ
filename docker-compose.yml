@@ -13,22 +13,7 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - STORAGE_TYPE=local
-    depends_on:
-      db:
-        condition: service_healthy
-    volumes:
-      - uploads:/app/public/uploads
-    restart: unless-stopped
-
-  worker:
-    build: .
-    command: node -e "require('./src/worker/index.ts')"
-    # For a compiled build, override with: node dist/worker/index.js
-    # The worker shares the same image as the app; only the entrypoint differs.
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/grocerybill
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - STORAGE_TYPE=local
+      - OCR_INLINE_FALLBACK=true
     depends_on:
       db:
         condition: service_healthy

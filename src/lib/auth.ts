@@ -3,9 +3,9 @@ import type { NextAuthConfig } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
 import { PrismaAdapter } from '@auth/prisma-adapter'
-import bcrypt from 'bcryptjs'
 import { db } from './db'
 import { z } from 'zod'
+import { isGoogleAuthConfigured } from './env'
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -15,22 +15,28 @@ const credentialsSchema = z.object({
 export const authConfig: NextAuthConfig = {
   adapter: PrismaAdapter(db) as NextAuthConfig['adapter'],
   session: { strategy: 'jwt' },
+  trustHost: true,
   pages: {
     signIn: '/signin',
     error: '/signin',
   },
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      authorization: {
-        params: {
-          scope: 'openid profile email https://www.googleapis.com/auth/spreadsheets',
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
-    }),
+    ...(isGoogleAuthConfigured()
+      ? [
+          GoogleProvider({
+            clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+            allowDangerousEmailAccountLinking: true,
+            authorization: {
+              params: {
+                scope: 'openid profile email https://www.googleapis.com/auth/spreadsheets',
+                access_type: 'offline',
+                prompt: 'consent',
+              },
+            },
+          }),
+        ]
+      : []),
     CredentialsProvider({
       name: 'credentials',
       credentials: {
@@ -47,6 +53,7 @@ export const authConfig: NextAuthConfig = {
 
         if (!user || !user.password) return null
 
+        const bcrypt = await import('bcryptjs')
         const valid = await bcrypt.compare(parsed.data.password, user.password)
         if (!valid) return null
 

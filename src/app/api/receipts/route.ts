@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { createHash } from 'crypto'
+import { Prisma } from '@prisma/client'
 import sharp from 'sharp'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { saveFile, validateFile } from '@/lib/storage'
+import { deleteFile, saveFile, validateFile } from '@/lib/storage'
+import { shouldProcessReceiptsInline } from '@/lib/env'
 import { enqueueJob, processQueuedReceiptInline } from '@/lib/queue'
 import { rateLimit } from '@/lib/rate-limit'
 import { errorResponse, validationErrorResponse } from '@/lib/api-errors'
@@ -131,23 +133,47 @@ export async function POST(req: NextRequest) {
     return errorResponse(500, 'UPLOAD_SAVE_FAILED', 'We could not save the receipt file. Please try again.')
   }
 
-  const receipt = await db.receipt.create({
-    data: {
-      userId: session.user.id,
-      fileUrl: stored.url,
-      fileType: mimeType,
-      fileName: file.name,
-      fileSize: file.size,
-      fileHash,
-      status: 'queued',
-    },
-  })
+  let receipt
+  try {
+    receipt = await db.receipt.create({
+      data: {
+        userId: session.user.id,
+        fileUrl: stored.url,
+        fileType: mimeType,
+        fileName: file.name,
+        fileSize: file.size,
+        fileHash,
+        status: 'queued',
+      },
+    })
+  } catch (err: unknown) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      await deleteFile(stored.key).catch(() => undefined)
+      const duplicateReceipt = await db.receipt.findFirst({
+        where: { userId: session.user.id, fileHash },
+        select: { id: true, storeName: true, uploadDate: true, purchaseDate: true, grandTotal: true },
+      })
+
+      return NextResponse.json(
+        {
+          error: 'This receipt has already been uploaded.',
+          code: 'DUPLICATE_FILE',
+          existingReceiptId: duplicateReceipt?.id ?? null,
+          storeName: duplicateReceipt?.storeName ?? null,
+          date: (duplicateReceipt?.purchaseDate ?? duplicateReceipt?.uploadDate)?.toISOString() ?? null,
+          grandTotal: duplicateReceipt?.grandTotal ?? null,
+        },
+        { status: 409 },
+      )
+    }
+
+    throw err
+  }
 
   await enqueueJob(receipt.id)
 
-  // In dev (or when OCR_INLINE_FALLBACK=true), process the receipt inline after
-  // the response is sent so the user doesn't need to run a separate worker.
-  if (process.env.OCR_INLINE_FALLBACK !== 'false' && process.env.NODE_ENV !== 'production') {
+  // For a tiny beta, inline processing avoids needing a dedicated worker service.
+  if (shouldProcessReceiptsInline()) {
     after(() => processQueuedReceiptInline(receipt.id).catch((err) => {
       console.error('[inline-ocr] upload fallback failed:', err)
     }))

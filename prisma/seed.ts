@@ -4,6 +4,11 @@ import bcrypt from 'bcryptjs'
 const prisma = new PrismaClient()
 
 async function main() {
+  if (process.env.SEED_DEMO_DATA !== 'true') {
+    console.log('Skipping demo seed data. Set SEED_DEMO_DATA=true if you want sample users and receipts.')
+    return
+  }
+
   console.log('Seeding database...')
 
   // Admin user

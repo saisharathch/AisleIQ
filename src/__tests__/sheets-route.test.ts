@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server'
 import { POST as syncReceiptToSheets } from '@/app/api/receipts/[id]/sheets/route'
 import { requireAuth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { uploadReceiptToSheets } from '@/lib/google-sheets'
+import { getSheetsOwnerUser, uploadReceiptToSheets } from '@/lib/google-sheets'
 
 jest.mock('@/lib/auth', () => ({
   requireAuth: jest.fn(),
@@ -36,6 +36,7 @@ jest.mock('@/lib/google-sheets', () => ({
     'Snacks', 'Beverages', 'Household', 'Personal Care', 'Other',
   ],
   uploadReceiptToSheets: jest.fn(),
+  getSheetsOwnerUser: jest.fn(),
   categorizeItem: jest.fn((item: string) => (item.toLowerCase().includes('milk') ? 'Dairy' : 'Other')),
 }))
 
@@ -58,6 +59,7 @@ const mockedDb = db as unknown as {
   }
 }
 const mockedUploadReceiptToSheets = jest.mocked(uploadReceiptToSheets)
+const mockedGetSheetsOwnerUser = jest.mocked(getSheetsOwnerUser)
 
 function makeReceipt(overrides: Record<string, unknown> = {}) {
   return {
@@ -106,13 +108,22 @@ describe('google sheets pilot sync route', () => {
     jest.clearAllMocks()
     mockedRequireAuth.mockResolvedValue({ id: 'user-1' } as never)
     mockedDb.receipt.findFirst.mockResolvedValue(makeReceipt())
-    mockedDb.user.findUnique.mockResolvedValue({ sheetsSpreadsheetId: 'sheet-existing' })
+    mockedDb.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user-1@example.com',
+      sheetsSpreadsheetId: 'sheet-existing',
+    })
     mockedDb.user.update.mockResolvedValue({ id: 'user-1' })
     mockedDb.receipt.update.mockResolvedValue({ id: 'receipt-1' })
     mockedDb.receiptItem.update.mockResolvedValue({ id: 'item-1' })
     mockedDb.categoryPreference.upsert.mockResolvedValue({ id: 'pref-1' })
     mockedDb.categoryPreference.findUnique.mockResolvedValue(null)
     mockedUploadReceiptToSheets.mockResolvedValue('sheet-123')
+    mockedGetSheetsOwnerUser.mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    delete process.env.GOOGLE_SHEETS_OWNER_EMAIL
   })
 
   it('syncs a processed receipt to Google Sheets', async () => {
@@ -140,6 +151,36 @@ describe('google sheets pilot sync route', () => {
     )
     expect(mockedDb.user.update).toHaveBeenCalled()
     expect(mockedDb.receipt.update).toHaveBeenCalled()
+  })
+
+  it('uses the configured shared sheet owner when present', async () => {
+    process.env.GOOGLE_SHEETS_OWNER_EMAIL = 'owner@example.com'
+    mockedGetSheetsOwnerUser.mockResolvedValueOnce({
+      id: 'owner-user',
+      email: 'owner@example.com',
+      sheetsSpreadsheetId: 'sheet-owner',
+    } as never)
+
+    const req = new NextRequest('http://localhost/api/receipts/receipt-1/sheets', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    const res = await syncReceiptToSheets(req, { params: Promise.resolve({ id: 'receipt-1' }) })
+    const body = await readJson(res)
+
+    expect(res.status).toBe(200)
+    expect(body.ownerEmail).toBe('owner@example.com')
+    expect(mockedUploadReceiptToSheets).toHaveBeenCalledWith(
+      'owner-user',
+      'sheet-owner',
+      expect.any(Array),
+    )
+    expect(mockedDb.user.update).toHaveBeenCalledWith({
+      where: { id: 'owner-user' },
+      data: { sheetsSpreadsheetId: 'sheet-123' },
+    })
   })
 
   it('prevents duplicate sync unless force is enabled', async () => {

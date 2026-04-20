@@ -19,6 +19,8 @@ interface Props {
   email: string
   spreadsheetId: string | null
   sheetsConnected: boolean
+  sheetsOwnerEmail: string | null
+  isSheetsOwner: boolean
   memberSince: string | null
   categoryPrefs: CategoryPref[]
 }
@@ -44,7 +46,16 @@ function Section({ title, description, icon: Icon, children }: {
   )
 }
 
-export function SettingsForm({ name, email, spreadsheetId, sheetsConnected, memberSince, categoryPrefs }: Props) {
+export function SettingsForm({
+  name,
+  email,
+  spreadsheetId,
+  sheetsConnected,
+  sheetsOwnerEmail,
+  isSheetsOwner,
+  memberSince,
+  categoryPrefs,
+}: Props) {
   const router = useRouter()
   const [displayName, setDisplayName] = useState(name)
   const [savingName, setSavingName]   = useState(false)
@@ -133,7 +144,14 @@ export function SettingsForm({ name, email, spreadsheetId, sheetsConnected, memb
           )}
           {!sheetsConnected && (
             <p className="text-xs text-slate-400">
-              Sign in with Google to enable automatic Sheets sync.
+              {isSheetsOwner
+                ? 'Sign in with Google to enable automatic Sheets sync.'
+                : `Google Sheets is owned by ${sheetsOwnerEmail ?? 'the primary beta account'}. They connect once and share the sheet manually.`}
+            </p>
+          )}
+          {sheetsConnected && !isSheetsOwner && (
+            <p className="text-xs text-slate-400">
+              This beta uses one shared Google Sheet. Only {sheetsOwnerEmail ?? 'the owner account'} needs to keep Google connected.
             </p>
           )}
         </div>
@@ -147,7 +165,7 @@ export function SettingsForm({ name, email, spreadsheetId, sheetsConnected, memb
       >
         {categoryPrefs.length === 0 ? (
           <p className="text-xs text-slate-400 py-4 text-center">
-            No learned categories yet. Edit an item's category in a receipt to teach the system.
+            No learned categories yet. Edit an item&apos;s category in a receipt to teach the system.
           </p>
         ) : (
           <div className="space-y-1">
