@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { AppShell } from '@/components/layout/AppShell'
 import { BudgetTracker } from '@/components/budget/BudgetTracker'
+import { BudgetAlerts } from '@/components/budget/BudgetAlerts'
 
 export default async function BudgetsPage() {
   const session = await auth()
@@ -45,9 +46,31 @@ export default async function BudgetsPage() {
     ...categoryActuals.map((c) => c.category),
   ])).sort()
 
+  // Compute budget alerts (≥80% spent)
+  const overallBudget = budgets.find((b) => b.year === year && b.month === month && !b.category)
+  const alerts = []
+
+  if (overallBudget && totalSpend > 0) {
+    const pct = (totalSpend / overallBudget.amount) * 100
+    if (pct >= 80) {
+      alerts.push({ label: 'Overall Monthly Budget', spent: totalSpend, budget: overallBudget.amount, percent: pct })
+    }
+  }
+
+  for (const budget of budgets.filter((b) => b.year === year && b.month === month && b.category)) {
+    const actual = categoryActuals.find((c) => c.category === budget.category)
+    if (actual) {
+      const pct = (actual.spent / budget.amount) * 100
+      if (pct >= 80) {
+        alerts.push({ label: budget.category!, spent: actual.spent, budget: budget.amount, percent: pct })
+      }
+    }
+  }
+
   return (
     <AppShell title="Budgets">
-      <div className="px-4 sm:px-6 py-6 max-w-[1400px]">
+      <div className="px-4 sm:px-6 py-6 max-w-[1400px] space-y-6">
+        <BudgetAlerts alerts={alerts} />
         <BudgetTracker
           budgets={budgets}
           categoryActuals={categoryActuals}

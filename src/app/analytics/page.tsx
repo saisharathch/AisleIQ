@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { AppShell } from '@/components/layout/AppShell'
 import { AnalyticsDashboard } from '@/components/receipt/AnalyticsDashboard'
+import { MonthlyDigestButton } from '@/components/analytics/MonthlyDigestButton'
 
 export default async function AnalyticsPage() {
   const session = await auth()
@@ -102,7 +103,20 @@ export default async function AnalyticsPage() {
     .filter((r) => (r.purchaseDate ?? r.uploadDate) >= twelveMonthsAgo)
 
   return (
-    <AppShell title="Analytics">
+    <AppShell
+      title="Analytics"
+      actions={
+        <MonthlyDigestButton
+          monthlyTrend={monthlyTrend}
+          categoryTotals={categoryTotals}
+          storeComparison={storeComparison}
+          topItems={topItems}
+          totalThisMonth={+totalThisMonth.toFixed(2)}
+          totalLastMonth={+totalLastMonth.toFixed(2)}
+          countThisMonth={countThisMonth}
+        />
+      }
+    >
       <div className="px-4 sm:px-6 py-6 max-w-[1400px]">
         <AnalyticsDashboard
           monthlyTrend={monthlyTrend}

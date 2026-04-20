@@ -5,8 +5,9 @@ import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import {
   ShoppingCart, LayoutDashboard, ReceiptText, TrendingUp,
-  Sheet, Settings2, Upload, LogOut, X, ShieldCheck, ClipboardCheck, Wallet,
+  Sheet, Settings2, Upload, LogOut, X, ShieldCheck, ClipboardCheck, Wallet, ListChecks,
 } from 'lucide-react'
+import { ThemeToggle } from './ThemeToggle'
 
 const PRIMARY_NAV = [
   { href: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard' },
@@ -14,6 +15,7 @@ const PRIMARY_NAV = [
   { href: '/analytics',  icon: TrendingUp,      label: 'Analytics' },
   { href: '/review',     icon: ClipboardCheck,  label: 'Review Queue' },
   { href: '/budgets',    icon: Wallet,          label: 'Budgets' },
+  { href: '/shopping',   icon: ListChecks,      label: 'Shopping List' },
 ]
 
 const SECONDARY_NAV = [
@@ -38,14 +40,14 @@ export function Sidebar({ onClose }: Props) {
     href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
   return (
-    <aside className="flex h-full w-60 flex-col border-r border-slate-100 bg-white">
+    <aside className="flex h-full w-60 flex-col border-r border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950">
       {/* Logo */}
-      <div className="flex h-14 items-center justify-between px-5 border-b border-slate-100 shrink-0">
+      <div className="flex h-14 items-center justify-between px-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
         <Link href="/dashboard" className="flex items-center gap-2.5" onClick={onClose}>
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-600">
             <ShoppingCart className="h-4 w-4 text-white" />
           </div>
-          <span className="text-sm font-bold tracking-tight text-slate-900">AisleIQ</span>
+          <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">AisleIQ</span>
         </Link>
         {onClose && (
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-slate-700">
@@ -79,11 +81,11 @@ export function Sidebar({ onClose }: Props) {
                 onClick={onClose}
                 className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   active
-                    ? 'bg-teal-50 text-teal-700'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
                 }`}
               >
-                <item.icon className={`h-4 w-4 shrink-0 ${active ? 'text-teal-600' : 'text-slate-400'}`} />
+                <item.icon className={`h-4 w-4 shrink-0 ${active ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400 dark:text-slate-500'}`} />
                 {item.label}
               </Link>
             )
@@ -104,11 +106,11 @@ export function Sidebar({ onClose }: Props) {
                 onClick={onClose}
                 className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   active
-                    ? 'bg-teal-50 text-teal-700'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
                 }`}
               >
-                <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                <item.icon className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
                 {item.label}
               </Link>
             )
@@ -117,9 +119,9 @@ export function Sidebar({ onClose }: Props) {
             <Link
               href="/admin"
               onClick={onClose}
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
             >
-              <ShieldCheck className="h-4 w-4 shrink-0 text-slate-400" />
+              <ShieldCheck className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
               Admin
             </Link>
           )}
@@ -127,20 +129,25 @@ export function Sidebar({ onClose }: Props) {
       </div>
 
       {/* User section */}
-      <div className="border-t border-slate-100 p-3 shrink-0">
+      <div className="border-t border-slate-100 dark:border-slate-800 p-3 shrink-0 space-y-2">
+        {/* Theme toggle */}
+        <div className="flex items-center justify-between px-2">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Theme</span>
+          <ThemeToggle />
+        </div>
         <div className="flex items-center gap-3 rounded-lg px-2 py-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-slate-900">
+            <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
               {user?.name ?? 'User'}
             </p>
             <p className="truncate text-[10px] text-slate-400">{user?.email}</p>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
-            className="text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0"
             title="Sign out"
           >
             <LogOut className="h-4 w-4" />
