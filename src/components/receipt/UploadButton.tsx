@@ -3,9 +3,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { Upload, Loader2, X, CloudUpload, Copy, ArrowRight } from 'lucide-react'
+import { Upload, Loader2, X, CloudUpload, Copy, ArrowRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
 import { formatBytes, cn } from '@/lib/utils'
 import { getFriendlyErrorMessage, readApiError } from '@/lib/api-client'
 
@@ -170,63 +169,108 @@ export function UploadButton({ variant = 'button', className }: Props) {
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
           className={cn(
-            'group w-full rounded-xl border-2 border-dashed p-12 flex flex-col items-center gap-4 text-center transition-all cursor-pointer outline-none',
+            'group relative w-full rounded-2xl border-2 border-dashed p-12 flex flex-col items-center gap-5 text-center transition-all duration-300 cursor-pointer outline-none overflow-hidden',
             dragOver
-              ? 'border-primary bg-primary/5 scale-[1.01]'
-              : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30',
+              ? 'border-teal-400 bg-teal-50/60 dark:bg-teal-950/30 scale-[1.01]'
+              : 'border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700 hover:bg-slate-50/60 dark:hover:bg-slate-900/40',
             uploading && 'pointer-events-none opacity-60',
             className,
           )}
           aria-label="Upload receipt"
         >
+          {/* Subtle dot grid background */}
+          <div className={cn(
+            'absolute inset-0 transition-opacity duration-300',
+            dragOver ? 'opacity-100' : 'opacity-0 group-hover:opacity-60',
+          )}
+            style={{
+              backgroundImage: 'radial-gradient(circle, rgba(20,184,166,0.15) 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
+            }}
+          />
+
           <div
             className={cn(
-              'h-16 w-16 rounded-full flex items-center justify-center transition-colors',
-              dragOver ? 'bg-primary/20' : 'bg-muted group-hover:bg-primary/10',
+              'relative h-20 w-20 rounded-2xl flex items-center justify-center transition-all duration-300',
+              dragOver
+                ? 'bg-teal-100 dark:bg-teal-900/50 scale-110 rotate-3'
+                : 'bg-slate-100 dark:bg-slate-800 group-hover:bg-teal-50 dark:group-hover:bg-teal-950/40 group-hover:scale-105',
             )}
           >
             {uploading ? (
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <Loader2 className="h-9 w-9 animate-spin text-teal-600" />
             ) : (
               <CloudUpload
                 className={cn(
-                  'h-8 w-8 transition-colors',
-                  dragOver ? 'text-primary' : 'text-muted-foreground group-hover:text-primary',
+                  'h-9 w-9 transition-colors duration-200',
+                  dragOver ? 'text-teal-600' : 'text-slate-400 group-hover:text-teal-500',
                 )}
               />
             )}
           </div>
-          <div>
-            <p className="font-semibold text-lg">
-              {uploading ? 'Processing receipt...' : dragOver ? 'Drop to upload' : 'Upload your first receipt'}
+
+          <div className="relative space-y-1.5">
+            <p className={cn(
+              'font-bold text-xl transition-colors duration-200',
+              dragOver ? 'text-teal-700 dark:text-teal-300' : 'text-slate-900 dark:text-slate-100',
+            )}>
+              {uploading ? 'Processing receipt...' : dragOver ? 'Drop it like it\'s hot 🔥' : 'Upload your receipt'}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
               {uploading
                 ? 'AI is reading your receipt. This takes a few seconds...'
-                : 'Drag and drop or click to choose JPG, PNG, HEIC, or PDF up to 10 MB'}
+                : 'Drag and drop or click to choose · JPG, PNG, HEIC, PDF up to 10 MB'}
             </p>
           </div>
+
           {uploading && (
-            <div className="w-full max-w-xs">
-              <Progress value={progress} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-1 text-center">
+            <div className="relative w-full max-w-xs space-y-2">
+              {/* Gradient progress bar */}
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-500 ease-out shadow-sm"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-500 text-center">
                 {progress < 60 ? 'Uploading...' : progress < 100 ? 'Queueing receipt...' : 'Opening review page...'}
               </p>
             </div>
           )}
+
+          {!uploading && (
+            <div className={cn(
+              'relative inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200',
+              dragOver
+                ? 'bg-gradient-to-r from-teal-500 to-emerald-600 scale-105'
+                : 'bg-gradient-to-r from-teal-600 to-emerald-600 group-hover:from-teal-500 group-hover:to-emerald-500 group-hover:shadow-lg group-hover:-translate-y-0.5',
+            )}>
+              <Upload className="h-4 w-4" />
+              Choose File
+            </div>
+          )}
         </button>
       ) : (
-        <Button onClick={() => inputRef.current?.click()} disabled={uploading} className="gap-2">
+        <Button onClick={() => inputRef.current?.click()} disabled={uploading} className="gap-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 border-0 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 glow-teal-sm">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           {uploading ? 'Processing...' : 'Upload Receipt'}
         </Button>
       )}
 
+      {/* Modal overlay for button variant */}
       {uploading && variant === 'button' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-lg space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in">
+          <div className="glass shadow-2xl rounded-2xl p-7 w-full max-w-sm space-y-5 animate-scale-in">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Processing receipt...</h3>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600">
+                  <Sparkles className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100">Processing receipt...</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">AI is reading your data</p>
+                </div>
+              </div>
               <button
                 onClick={() => {
                   setUploading(false)
@@ -234,23 +278,31 @@ export function UploadButton({ variant = 'button', className }: Props) {
                   setSelectedFile(null)
                   setProgress(0)
                 }}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {selectedFile && (
-              <p className="text-sm text-muted-foreground">
-                {selectedFile.name} - {formatBytes(selectedFile.size)}
+              <p className="text-sm text-slate-500 dark:text-slate-400 truncate">
+                {selectedFile.name} · {formatBytes(selectedFile.size)}
               </p>
             )}
 
-            <Progress value={progress} />
-
-            <p className="text-xs text-muted-foreground text-center">
-              {progress < 60 ? 'Uploading...' : progress < 100 ? 'Queueing receipt...' : 'Opening review page...'}
-            </p>
+            {/* Gradient progress bar */}
+            <div className="space-y-2">
+              <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-500 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>{progress < 60 ? 'Uploading...' : progress < 100 ? 'Queueing receipt...' : 'Opening review page...'}</span>
+                <span className="font-semibold text-teal-600">{progress}%</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
