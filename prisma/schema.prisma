@@ -31,6 +31,7 @@ model User {
   editLogs  EditLog[]
   categoryPreferences CategoryPreference[]
   budgets   Budget[]
+  invitesSent Invite[]
 
   @@index([email])
 }
@@ -219,6 +220,23 @@ model Budget {
 
   @@unique([userId, year, month, category])
   @@index([userId, year, month])
+}
+
+// ─── Invites ───────────────────────────────────────────────────────────────
+
+model Invite {
+  id         String    @id @default(cuid())
+  email      String
+  token      String    @unique
+  invitedBy  String
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  inviter User @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([invitedBy])
 }
 
 // ─── Admin / Metrics ────────────────────────────────────────────────────────
