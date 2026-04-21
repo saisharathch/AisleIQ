@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { signUpSchema, type SignUpInput } from '@/lib/validators'
 
-export default function SignUpPage() {
+function SignUpForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -199,5 +199,22 @@ export default function SignUpPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="relative min-h-screen flex items-center justify-center overflow-hidden p-4">
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-50 via-white to-emerald-50/60 dark:from-slate-950 dark:via-slate-900 dark:to-teal-950/30" />
+          <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-50 dark:bg-teal-950/40">
+            <Loader2 className="h-8 w-8 text-teal-600 animate-spin" />
+          </div>
+        </div>
+      }
+    >
+      <SignUpForm />
+    </Suspense>
   )
 }
