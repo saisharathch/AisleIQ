@@ -4,7 +4,8 @@ const s3PublicBaseUrl = process.env.AWS_S3_PUBLIC_BASE_URL
 const s3PublicUrl = s3PublicBaseUrl ? new URL(s3PublicBaseUrl) : null
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // 'standalone' is for Docker only — omit on Vercel to avoid webpack bundling errors
+  ...(process.env.BUILD_STANDALONE === 'true' ? { output: 'standalone' as const } : {}),
   serverExternalPackages: ['@prisma/client', 'prisma', 'pdf-parse', 'sharp'],
   images: {
     remotePatterns: [
